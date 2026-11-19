@@ -85,6 +85,8 @@ repo đã có đủ cấu hình để deploy trong ~10 phút (xem mục 5).
                                                   users 4 | audit_logs 103 | case_events 235
 [Health]     GET /api/health                   → {"status":"ok","database":"postgresql",
                                                   "model":"gbdt-1.0.0","model_auc":0.9769}
+[Restart]    tắt/bật lại app                   → vẫn 5472 giao dịch / 142 case (seed idempotent,
+                                                  không nhân đôi dữ liệu)
 [Test PG]    pytest (TEST_DATABASE_URL=...)    → 10 passed, exit 0
 [Test SQLite] pytest                           → 10 passed, exit 0
 [Lint]       ruff check app tests              → All checks passed
