@@ -15,6 +15,7 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
 from app.db import Base
 
@@ -28,6 +29,34 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+class UTCDateTime(TypeDecorator[datetime]):
+    """Cột thời gian luôn là UTC naive khi đọc/ghi.
+
+    PostgreSQL mặc định trả về datetime có timezone cho cột timestamptz, còn
+    SQLite trả về naive; điều đó làm các phép so sánh với ``utcnow()`` nổ
+    ``TypeError: can't compare offset-naive and offset-aware datetimes``.
+    Dùng ``timestamp without time zone`` + chuẩn hoá ở hai đầu để cả hai
+    backend cùng trả về một kiểu.
+    """
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect):  # type: ignore[no-untyped-def]
+        if value is None:
+            return None
+        if value.tzinfo is not None:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+
+    def process_result_value(self, value: datetime | None, dialect):  # type: ignore[no-untyped-def]
+        if value is None:
+            return None
+        if value.tzinfo is not None:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -37,8 +66,8 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(20), default="analyst")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    last_login_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     cases: Mapped[list[Case]] = relationship(back_populates="assignee", foreign_keys="Case.assigned_to")
 
@@ -51,7 +80,7 @@ class Merchant(Base):
     category: Mapped[str] = mapped_column(String(60))
     country: Mapped[str] = mapped_column(String(2), default="VN")
     risk_tier: Mapped[str] = mapped_column(String(10), default="low")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 
 class Transaction(Base):
@@ -70,8 +99,8 @@ class Transaction(Base):
     card_country: Mapped[str] = mapped_column(String(2), default="VN")
     ip_country: Mapped[str] = mapped_column(String(2), default="VN")
     device_id: Mapped[str] = mapped_column(String(64))
-    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
-    ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    occurred_at: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
+    ingested_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     hour: Mapped[int] = mapped_column(Integer, default=12)
     is_night: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -108,10 +137,10 @@ class Case(Base):
     decision_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     assigned_to: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     risk_score: Mapped[float] = mapped_column(Float, default=0.0)
-    sla_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
-    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sla_due_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
+    resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     transaction: Mapped[Transaction] = relationship(back_populates="case")
     assignee: Mapped[User | None] = relationship(back_populates="cases", foreign_keys=[assigned_to])
@@ -130,7 +159,7 @@ class CaseNote(Base):
     author_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     body: Mapped[str] = mapped_column(Text)
     kind: Mapped[str] = mapped_column(String(20), default="note")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     case: Mapped[Case] = relationship(back_populates="notes")
     author: Mapped[User | None] = relationship()
@@ -145,7 +174,7 @@ class CaseEvent(Base):
     actor_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     message: Mapped[str] = mapped_column(Text)
     meta: Mapped[dict] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     case: Mapped[Case] = relationship(back_populates="events")
     actor: Mapped[User | None] = relationship()
@@ -162,7 +191,7 @@ class Explanation(Base):
     signals: Mapped[list] = mapped_column(JSON, default=list)
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     case: Mapped[Case] = relationship(back_populates="explanations")
 
@@ -179,9 +208,9 @@ class Rule(Base):
     category: Mapped[str] = mapped_column(String(30), default="general")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     hit_count: Mapped[int] = mapped_column(Integer, default=0)
-    last_hit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    last_hit_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
 
 
 class RefreshSession(Base):
@@ -190,11 +219,11 @@ class RefreshSession(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     ip: Mapped[str] = mapped_column(String(64), default="")
     user_agent: Mapped[str] = mapped_column(String(255), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 
 class AuditLog(Base):
@@ -210,7 +239,7 @@ class AuditLog(Base):
     after: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     ip: Mapped[str] = mapped_column(String(64), default="")
     user_agent: Mapped[str] = mapped_column(String(255), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
 
 
 class Setting(Base):
@@ -222,4 +251,4 @@ class Setting(Base):
     ml_weight: Mapped[float] = mapped_column(Float, default=0.55)
     rule_weight: Mapped[float] = mapped_column(Float, default=0.45)
     ai_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)

@@ -10,6 +10,12 @@ Write-Host "Cai dependencies Python..." -ForegroundColor Cyan
 .\.venv\Scripts\python.exe -m pip install -q --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -q -r requirements-dev.txt
 
+if (-not $env:DATABASE_URL) {
+    Write-Host "Khoi dong PostgreSQL local..." -ForegroundColor Cyan
+    & "$PSScriptRoot\scripts\dev-db.ps1" start
+    $env:DATABASE_URL = "postgresql+psycopg://postgres@127.0.0.1:5433/fraudlens"
+}
+
 if (-not (Test-Path "frontend\node_modules")) {
     Write-Host "Cai dependencies frontend..." -ForegroundColor Cyan
     Push-Location frontend

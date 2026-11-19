@@ -5,7 +5,11 @@ import tempfile
 from pathlib import Path
 
 TEST_DIR = Path(tempfile.mkdtemp(prefix="fraudlens-test-"))
-os.environ["DATABASE_URL"] = f"sqlite:///{(TEST_DIR / 'test.db').as_posix()}"
+# Mặc định test trên SQLite tạm cho nhanh. Đặt TEST_DATABASE_URL để chạy
+# cùng một bộ test trên PostgreSQL (conftest sẽ drop & tạo lại schema, nên
+# chỉ trỏ vào database dành riêng cho test, ví dụ fraudlens_test).
+EXTERNAL_DB = os.environ.get("TEST_DATABASE_URL")
+os.environ["DATABASE_URL"] = EXTERNAL_DB or f"sqlite:///{(TEST_DIR / 'test.db').as_posix()}"
 os.environ["SEED_ON_START"] = "false"
 os.environ["AI_ENABLED"] = "false"
 os.environ["JWT_SECRET"] = "test-secret-only-but-long-enough-32-chars"
@@ -23,6 +27,10 @@ from app.seed import seed_merchants, seed_rules, seed_users  # noqa: E402
 
 @pytest.fixture(scope="session")
 def client():
+    if EXTERNAL_DB:
+        from app.db import Base, engine
+
+        Base.metadata.drop_all(bind=engine)
     init_db()
     with SessionLocal() as db:
         if (db.scalar(select(func.count()).select_from(User)) or 0) == 0:

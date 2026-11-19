@@ -52,7 +52,7 @@ Chi tiết pipeline và schema: [`docs/architecture.md`](docs/architecture.md).
 | Lớp | Công nghệ |
 |---|---|
 | Backend | Python 3.13, FastAPI, SQLAlchemy 2, Pydantic v2 |
-| Dữ liệu | PostgreSQL (production), SQLite (dev/demo) |
+| Dữ liệu | PostgreSQL 14+ (mặc định, cả local lẫn production), SQLite (tuỳ chọn) |
 | ML | scikit-learn HistGradientBoosting, joblib artifact, permutation importance |
 | AI | OpenAI / Anthropic qua HTTP, fallback template offline |
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS, TanStack Query, Recharts |
@@ -67,7 +67,31 @@ cd fraudlens
 .\run.ps1
 ```
 
-Mở http://127.0.0.1:8000. Script tự tạo venv, cài dependency, build frontend và khởi động server.
+Script tự: tạo venv → cài dependency → **bật PostgreSQL local** → build frontend → chạy server.
+Mở http://127.0.0.1:8000.
+
+### Cơ sở dữ liệu
+
+Ứng dụng dùng **PostgreSQL** cho mọi môi trường. Không cần cài Docker hay quyền admin:
+`scripts/dev-db.ps1` tự khởi tạo một cluster riêng trong `.pgdata/`, lắng nghe
+`127.0.0.1:5433`, user `postgres`, database `fraudlens` (trust auth — chỉ dùng cho máy cá nhân).
+
+```powershell
+.\scripts\dev-db.ps1 start     # bật cluster + tạo database nếu chưa có
+.\scripts\dev-db.ps1 status    # kiểm tra server/database
+.\scripts\dev-db.ps1 stop      # tắt cluster
+.\scripts\dev-db.ps1 reset     # xoá sạch dữ liệu, lần chạy sau seed lại demo
+```
+
+Chuỗi kết nối mặc định: `postgresql+psycopg://postgres@127.0.0.1:5433/fraudlens`.
+Đổi bằng biến môi trường `DATABASE_URL`, ví dụ:
+
+```powershell
+$env:DATABASE_URL = "postgresql+psycopg://user:pass@127.0.0.1:5432/fraudlens"
+```
+
+Muốn chạy nhanh bằng SQLite (không cần Postgres): `$env:DATABASE_URL = "sqlite:///./data/fraudlens.db"`.
+Schema tạo bằng SQLAlchemy `create_all` ở lần khởi động đầu.
 
 ### Chạy tách backend/frontend để phát triển
 
@@ -75,6 +99,7 @@ Mở http://127.0.0.1:8000. Script tự tạo venv, cài dependency, build front
 # Terminal 1
 python -m venv .venv
 .\.venv\Scripts\pip install -r requirements-dev.txt
+.\scripts\dev-db.ps1 start
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 
 # Terminal 2
@@ -175,10 +200,20 @@ Huấn luyện lại:
 ## Kiểm thử
 
 ```powershell
+# Mặc định: SQLite tạm (nhanh)
 .\.venv\Scripts\python -m pytest -q
-.\.venv\Scripts\ruff check app tests
+
+# Chạy đúng bộ test đó trên PostgreSQL (tạo sẵn database fraudlens_test)
+.\.venv\Scripts\createdb.exe -h 127.0.0.1 -p 5433 -U postgres fraudlens_test   # lần đầu
+$env:TEST_DATABASE_URL = "postgresql+psycopg://postgres@127.0.0.1:5433/fraudlens_test"
+.\.venv\Scripts\python -m pytest -q
+
+.\.venv\Scripts\ruff.exe check app tests
 cd frontend; npm run build
 ```
+
+`TEST_DATABASE_URL` khiến conftest drop & tạo lại schema, nên **chỉ trỏ vào database test riêng**.
+CI (`.github/workflows/ci.yml`) chạy cả hai backend: PostgreSQL service + SQLite.
 
 10 test API bao phủ: login/refresh, RBAC, ingest → case → audit, decision không thể ghi đè, AI offline explanation, note/timeline, rule CRUD, dashboard, simulator.
 
@@ -222,6 +257,7 @@ fraudlens/
 │   └── lib/               # api, auth, format, types
 ├── tests/
 ├── docs/
+├── scripts/dev-db.ps1     # quản lý cluster PostgreSQL local (.pgdata, cổng 5433)
 ├── Dockerfile
 ├── docker-compose.yml
 └── render.yaml
@@ -238,4 +274,5 @@ fraudlens/
 
 Đề bài yêu cầu **không tự động kết luận gian lận khi chưa có người xác nhận**. FraudLens thể hiện rõ điều này ở 3 lớp: UI banner “chưa kết luận”, API chặn decision nếu thiếu `confirm` và ghi chú, và audit trail bất biến cho mọi kết luận. AI chỉ tạo **bản nháp giải thích** — không có quyền thay đổi trạng thái case.
 
-Xem thêm: [`docs/spec-mapping.md`](docs/spec-mapping.md) — đối chiếu từng yêu cầu đề bài với phần đã triển khai.
+Xem thêm: [`docs/spec-mapping.md`](docs/spec-mapping.md) — đối chiếu từng yêu cầu đề bài với phần đã triển khai,
+và [`docs/compliance-audit.md`](docs/compliance-audit.md) — **kết quả kiểm chứng thực tế** (test, lint, build, thao tác UI, PostgreSQL) kèm danh sách việc còn thiếu.
