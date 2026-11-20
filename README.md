@@ -52,7 +52,7 @@ Chi tiết pipeline và schema: [`docs/architecture.md`](docs/architecture.md).
 | Lớp | Công nghệ |
 |---|---|
 | Backend | Python 3.13, FastAPI, SQLAlchemy 2, Pydantic v2 |
-| Dữ liệu | PostgreSQL 14+ (mặc định, cả local lẫn production), SQLite (tuỳ chọn) |
+| Dữ liệu | PostgreSQL 14+ (database duy nhất, cả local lẫn production) |
 | ML | scikit-learn HistGradientBoosting, joblib artifact, permutation importance |
 | AI | OpenAI / Anthropic qua HTTP, fallback template offline |
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS, TanStack Query, Recharts |
@@ -90,7 +90,6 @@ Chuỗi kết nối mặc định: `postgresql+psycopg://postgres@127.0.0.1:5433
 $env:DATABASE_URL = "postgresql+psycopg://user:pass@127.0.0.1:5432/fraudlens"
 ```
 
-Muốn chạy nhanh bằng SQLite (không cần Postgres): `$env:DATABASE_URL = "sqlite:///./data/fraudlens.db"`.
 Schema tạo bằng SQLAlchemy `create_all` ở lần khởi động đầu.
 
 ### Chạy tách backend/frontend để phát triển
@@ -251,23 +250,28 @@ Huấn luyện lại:
 
 ## Kiểm thử
 
+Bộ test chạy trên PostgreSQL (không còn SQLite). Tạo database test một lần:
+
 ```powershell
-# Mặc định: SQLite tạm (nhanh)
-.\.venv\Scripts\python -m pytest -q
+.\scripts\dev-db.ps1 start                                                     # bật Postgres local
+& "$env:ProgramFiles\PostgreSQL\18\bin\createdb.exe" -h 127.0.0.1 -p 5433 -U postgres fraudlens_test
+```
 
-# Chạy đúng bộ test đó trên PostgreSQL (tạo sẵn database fraudlens_test)
-.\.venv\Scripts\createdb.exe -h 127.0.0.1 -p 5433 -U postgres fraudlens_test   # lần đầu
-$env:TEST_DATABASE_URL = "postgresql+psycopg://postgres@127.0.0.1:5433/fraudlens_test"
-.\.venv\Scripts\python -m pytest -q
+Sau đó:
 
+```powershell
+.\.venv\Scripts\python -m pytest -q          # mặc định dùng fraudlens_test ở cổng 5433
 .\.venv\Scripts\ruff.exe check app tests
 cd frontend; npm run build
 ```
 
-`TEST_DATABASE_URL` khiến conftest drop & tạo lại schema, nên **chỉ trỏ vào database test riêng**.
-CI (`.github/workflows/ci.yml`) chạy cả hai backend: PostgreSQL service + SQLite.
+Muốn trỏ sang Postgres khác: `$env:TEST_DATABASE_URL = "postgresql+psycopg://user:pass@host:5432/fraudlens_test"`.
+Conftest **xoá và tạo lại schema** mỗi lần chạy, và từ chối chạy nếu tên database không chứa `test`
+(tránh xoá nhầm database thật). CI chạy đúng bộ test này trên PostgreSQL service.
 
-10 test API bao phủ: login/refresh, RBAC, ingest → case → audit, decision không thể ghi đè, AI offline explanation, note/timeline, rule CRUD, dashboard, simulator.
+16 test bao phủ: login/refresh, RBAC, ingest → case → audit, decision không thể ghi đè, AI offline,
+AI qua OpenRouter (HTTP giả lập), fallback khi 429, seed không gọi LLM, security headers,
+fail-fast cấu hình production, rate-limit tạo lại giải thích, note/timeline, rule CRUD, dashboard, simulator.
 
 ## API chính
 
@@ -314,6 +318,17 @@ fraudlens/
 ├── docker-compose.yml
 └── render.yaml
 ```
+
+## Giao diện giới thiệu (Frutiger Aero)
+
+[`aero/`](aero/) là landing page độc lập dựng bằng HTML/CSS/JS thuần — không build, không thư viện,
+không phụ thuộc ảnh hay CDN ngoài. Trang giới thiệu sản phẩm theo phong cách Frutiger Aero
+(bầu trời, aurora, đồi cỏ, kính mờ, nút gel bóng) kèm **Risk Lab** cho phép kéo tham số để thấy
+điểm rủi ro thay đổi theo đúng công thức `ml × 0.55 + rule × 0.45`.
+
+Mở `aero/index.html` trong trình duyệt, hoặc xem chi tiết tại [`aero/README.md`](aero/README.md).
+
+![Landing page Frutiger Aero](aero/preview/desktop-hero.png)
 
 ## Giới hạn & hướng phát triển
 

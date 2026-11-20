@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from pathlib import Path
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from app.config import BASE_DIR, settings
+from app.config import settings
 
 
 class Base(DeclarativeBase):
@@ -14,6 +13,7 @@ class Base(DeclarativeBase):
 
 
 def _normalize_url(url: str) -> str:
+    """Chuẩn hoá URL Postgres về driver psycopg 3."""
     if url.startswith("postgres://"):
         return url.replace("postgres://", "postgresql+psycopg://", 1)
     if url.startswith("postgresql://"):
@@ -23,23 +23,14 @@ def _normalize_url(url: str) -> str:
 
 database_url = _normalize_url(settings.database_url)
 
-if database_url.startswith("sqlite"):
-    Path(BASE_DIR / "data").mkdir(parents=True, exist_ok=True)
-    engine = create_engine(
-        database_url,
-        connect_args={"check_same_thread": False},
-        pool_pre_ping=True,
+if not database_url.startswith(("postgresql", "postgres")):
+    raise RuntimeError(
+        "FraudLens chỉ hỗ trợ PostgreSQL. Đặt DATABASE_URL dạng "
+        "postgresql+psycopg://user:pass@host:5432/fraudlens "
+        f"(giá trị hiện tại: {database_url.split('://')[0]}://...)"
     )
 
-    @event.listens_for(engine, "connect")
-    def _set_sqlite_pragma(dbapi_connection, _connection_record):  # type: ignore[no-untyped-def]
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.close()
-
-else:
-    engine = create_engine(database_url, pool_pre_ping=True, pool_size=5, max_overflow=10)
+engine = create_engine(database_url, pool_pre_ping=True, pool_size=5, max_overflow=10)
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 

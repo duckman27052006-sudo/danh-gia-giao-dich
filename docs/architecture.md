@@ -122,10 +122,10 @@ Nếu không có key hoặc provider lỗi, service dùng template tiếng Việ
 - Render blueprint tạo Postgres + web service, health check `/api/health`.
 - PostgreSQL là backend chính cho cả dev lẫn production (`psycopg` 3). Dev dùng cluster riêng
   trong `.pgdata/` do `scripts/dev-db.ps1` quản lý (127.0.0.1:5433, không cần admin/Docker).
-- `DATABASE_URL` có thể trỏ sang SQLite (`sqlite:///./data/fraudlens.db`) để chạy nhanh, nhưng
-  bộ test chuẩn và CI đều chạy trên PostgreSQL.
-- Cột thời gian dùng `UTCDateTime` (`app/models.py`): luôn lưu/đọc UTC naive để PostgreSQL và
-  SQLite trả về cùng một kiểu, tránh lỗi so sánh naive/aware.
+- PostgreSQL là database duy nhất — app, bộ test và CI đều chạy trên PostgreSQL
+  (test dùng database riêng `fraudlens_test`, conftest xoá & tạo lại schema mỗi lần chạy).
+- Cột thời gian dùng `UTCDateTime` (`app/models.py`): luôn lưu/đọc UTC naive để logic so sánh
+  với `utcnow()` không lệch múi giờ (PostgreSQL trả aware cho cột `timestamptz`).
 - Seed tự động khi DB rỗng và `SEED_ON_START=true`; đặt `DEMO_MODE=false` khi triển khai thật.
 
 ## 9. Quyết định thiết kế

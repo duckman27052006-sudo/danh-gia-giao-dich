@@ -4,8 +4,6 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
-data/*.db
-data/*.db-*
 .pgdata/
 .env
 .env.local

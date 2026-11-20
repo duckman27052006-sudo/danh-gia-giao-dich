@@ -26,18 +26,17 @@ def new_id() -> str:
 
 
 def utcnow() -> datetime:
-    """UTC naive để lưu DB nhất quán giữa SQLite và PostgreSQL."""
+    """UTC naive — mọi thời điểm trong hệ thống đều lưu/so sánh ở dạng này."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class UTCDateTime(TypeDecorator[datetime]):
     """Cột thời gian luôn là UTC naive khi đọc/ghi.
 
-    PostgreSQL mặc định trả về datetime có timezone cho cột timestamptz, còn
-    SQLite trả về naive; điều đó làm các phép so sánh với ``utcnow()`` nổ
+    PostgreSQL trả về datetime *có* timezone cho cột ``timestamptz`` trong khi
+    toàn bộ logic của app so sánh với ``utcnow()`` (naive) — chênh lệch này gây
     ``TypeError: can't compare offset-naive and offset-aware datetimes``.
-    Dùng ``timestamp without time zone`` + chuẩn hoá ở hai đầu để cả hai
-    backend cùng trả về một kiểu.
+    Dùng ``timestamp without time zone`` + chuẩn hoá ở hai đầu để thống nhất.
     """
 
     impl = DateTime

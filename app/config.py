@@ -13,10 +13,8 @@ class Settings(BaseSettings):
 
     app_name: str = "FraudLens"
     environment: str = "development"
-    # Mặc định dùng PostgreSQL của máy local (xem scripts/dev-db.ps1).
-    # Đặt DATABASE_URL để trỏ sang Postgres khác / SQLite:
-    #   postgresql+psycopg://user:pass@host:5432/fraudlens
-    #   sqlite:///./data/fraudlens.db
+    # PostgreSQL là database duy nhất của hệ thống (xem scripts/dev-db.ps1).
+    # Đổi bằng DATABASE_URL: postgresql+psycopg://user:pass@host:5432/fraudlens
     database_url: str = "postgresql+psycopg://postgres@127.0.0.1:5433/fraudlens"
     jwt_secret: str = "dev-only-change-me-in-production"
     access_token_minutes: int = 45

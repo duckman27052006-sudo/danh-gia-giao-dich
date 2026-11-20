@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import os
-import tempfile
-from pathlib import Path
 
-TEST_DIR = Path(tempfile.mkdtemp(prefix="fraudlens-test-"))
-# Mặc định test trên SQLite tạm cho nhanh. Đặt TEST_DATABASE_URL để chạy
-# cùng một bộ test trên PostgreSQL (conftest sẽ drop & tạo lại schema, nên
-# chỉ trỏ vào database dành riêng cho test, ví dụ fraudlens_test).
-EXTERNAL_DB = os.environ.get("TEST_DATABASE_URL")
-os.environ["DATABASE_URL"] = EXTERNAL_DB or f"sqlite:///{(TEST_DIR / 'test.db').as_posix()}"
+# Bộ test chạy trên PostgreSQL (không còn SQLite). Mặc định dùng database test
+# của cluster local do scripts/dev-db.ps1 quản lý; đổi bằng TEST_DATABASE_URL.
+DEFAULT_TEST_DB = "postgresql+psycopg://postgres@127.0.0.1:5433/fraudlens_test"
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DB)
+
+if "test" not in TEST_DATABASE_URL.lower():
+    raise RuntimeError(
+        "TEST_DATABASE_URL phải trỏ vào database dành riêng cho test (tên chứa 'test'), "
+        f"vì bộ test sẽ xoá và tạo lại toàn bộ schema. Hiện tại: {TEST_DATABASE_URL}"
+    )
+
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["SEED_ON_START"] = "false"
 os.environ["AI_ENABLED"] = "false"
 os.environ["JWT_SECRET"] = "test-secret-only-but-long-enough-32-chars"
@@ -19,7 +23,7 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import func, select  # noqa: E402
 
-from app.db import SessionLocal, init_db  # noqa: E402
+from app.db import Base, SessionLocal, engine, init_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Setting, User  # noqa: E402
 from app.seed import seed_merchants, seed_rules, seed_users  # noqa: E402
@@ -27,10 +31,8 @@ from app.seed import seed_merchants, seed_rules, seed_users  # noqa: E402
 
 @pytest.fixture(scope="session")
 def client():
-    if EXTERNAL_DB:
-        from app.db import Base, engine
-
-        Base.metadata.drop_all(bind=engine)
+    # Database test được xoá sạch mỗi lần chạy để test độc lập với dữ liệu cũ.
+    Base.metadata.drop_all(bind=engine)
     init_db()
     with SessionLocal() as db:
         if (db.scalar(select(func.count()).select_from(User)) or 0) == 0:

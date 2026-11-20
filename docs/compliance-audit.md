@@ -55,7 +55,7 @@ repo đã có đủ cấu hình để deploy trong ~10 phút (xem mục 5).
 
 | Gợi ý | Thực tế | Ghi chú |
 |---|---|---|
-| PostgreSQL | ✅ dùng chính | Đã chuyển default từ SQLite sang PostgreSQL trong lần audit này |
+| PostgreSQL | ✅ database duy nhất | Runtime, bộ test và CI đều chạy trên PostgreSQL |
 | Python/scikit-learn | ✅ | 3.14, scikit-learn 1.9.1 |
 | FastAPI | ✅ | 0.165 |
 | Streamlit/Dash (Plotly) | ⚠️ thay bằng React + Recharts | Vẫn là web app đầy đủ và deploy được; Streamlit không deploy SPA/RBAC tốt bằng. **Nếu giảng viên chấm đúng stack, có thể bổ sung 1 trang Streamlit đọc từ API** — chi phí ~30 phút. |
@@ -118,7 +118,7 @@ timeline ghi `AI tạo bản giải thích (openrouter/openrouter/free)`.
 | Kiểm soát con người | ĐẠT | UI disclaimer + API `confirm` + audit bất biến |
 | Dữ liệu nhạy cảm | ĐẠT | 100% dữ liệu demo tổng hợp, không PII thật |
 | Vận hành | ĐẠT | `/api/health` trả `database/model/model_auc`, seed idempotent, Docker, `.env.example` |
-| Kiểm thử | ĐẠT | 10 API test × 2 backend (PostgreSQL + SQLite), ruff sạch, `tsc` + `vite build` sạch |
+| Kiểm thử | ĐẠT | 16 test trên PostgreSQL, ruff sạch, `tsc` + `vite build` sạch |
 | Hiệu năng | ĐẠT (quy mô demo) | 5.472 giao dịch/142 case: `GET /api/dashboard` **181 ms**, 21 KB sau gzip; JS tách theo trang, trang login không tải chunk biểu đồ (457 KB) |
 
 ## 4. Những gì đã chạy trong lần audit này
@@ -133,9 +133,8 @@ timeline ghi `AI tạo bản giải thích (openrouter/openrouter/free)`.
                                                   "model":"gbdt-1.0.0","model_auc":0.9769}
 [Restart]    tắt/bật lại app                   → vẫn 5472 giao dịch / 142 case (seed idempotent,
                                                   không nhân đôi dữ liệu)
-[Test PG]    pytest (TEST_DATABASE_URL=...)    → 10 passed, exit 0
-[Test SQLite] pytest                           → 10 passed, exit 0
-[Lint]       ruff check app tests              → All checks passed
+[Test]       pytest (PostgreSQL fraudlens_test) → 16 passed, exit 0
+[Lint]       ruff check app tests               → All checks passed
 [Build]      npm run build                     → tsc OK, 2074 modules, dist/ 1.27 kB + assets
 [UI]         Chromium 1262×568                 → login (3 vai trò), dashboard, queue, case detail,
                                                   transactions, rules, users, audit, settings
@@ -151,10 +150,10 @@ timeline ghi `AI tạo bản giải thích (openrouter/openrouter/free)`.
 ### Lỗi phát hiện và đã sửa trong audit
 
 1. **PostgreSQL: `TypeError: can't compare offset-naive and offset-aware datetimes`** — 2 test fail
-   khi chạy trên PostgreSQL. Nguyên nhân: cột khai báo `DateTime(timezone=True)` nên PostgreSQL
-   trả về datetime *có* timezone, còn SQLite trả về *naive*, trong khi code so sánh với `utcnow()`
-   (naive). Đã sửa bằng `UTCDateTime` TypeDecorator trong `app/models.py`: luôn lưu/đọc UTC naive,
-   hai backend trả về cùng một kiểu. Sau khi sửa: 10/10 pass trên cả hai.
+   khi chuyển từ SQLite sang PostgreSQL. Nguyên nhân: cột khai báo `DateTime(timezone=True)` nên
+   PostgreSQL trả về datetime *có* timezone, trong khi code so sánh với `utcnow()` (naive). Đã sửa
+   bằng `UTCDateTime` TypeDecorator trong `app/models.py`: luôn lưu/đọc UTC naive. Sau khi sửa:
+   16/16 pass.
 2. **Bảng hàng chờ rộng hơn khung ở màn hình ≤1280px** — bảng có 9 cột, `min-w-[1080px]`
    trong khung ~944px nên phải cuộn ngang (đã có `overflow-x-auto`, không mất dữ liệu). Đây là
    lựa chọn responsive có chủ đích cho bảng vận hành nhiều cột; nếu muốn gọn hơn ở laptop 13"
@@ -173,7 +172,7 @@ timeline ghi `AI tạo bản giải thích (openrouter/openrouter/free)`.
 
 ## 6. Checklist trước khi nộp
 
-- [x] `pytest` xanh trên PostgreSQL và SQLite
+- [x] `pytest` xanh trên PostgreSQL (16 test)
 - [x] `ruff check app tests` sạch
 - [x] `npm run build` sạch (TypeScript strict, không warning)
 - [x] Đăng nhập được cả 3 vai trò, phân quyền đúng
