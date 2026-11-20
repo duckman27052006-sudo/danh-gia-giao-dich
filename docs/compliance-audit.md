@@ -91,6 +91,12 @@ Cấu hình chốt: `AI_MODEL=openrouter/free`, dự phòng `baidu/ernie-5.5-fla
 `nvidia/nemotron-3-ultra-550b-a55b:free`, `AI_TIMEOUT_SECONDS=75`. Vì free tier hay trả 429 và
 phản hồi 25–45 s, code có thêm chuỗi fallback (`AI_FALLBACK_MODELS`) để demo không bị chết giữa chừng.
 
+![Case detail với giải thích từ model free](screenshots/case-ai-free.png)
+
+Case `CASE-2026-0007` (44.000.000đ, điểm 87,4, 4 rule khớp) chạy bằng `openrouter/free`:
+`provider=openrouter`, `model=openrouter/free`, `latency_ms=33674`, 5 tín hiệu + 4 câu hỏi,
+timeline ghi `AI tạo bản giải thích (openrouter/openrouter/free)`.
+
 ## 3. Yêu cầu phi chức năng
 
 | Yêu cầu | Trạng thái | Cách đáp ứng |
