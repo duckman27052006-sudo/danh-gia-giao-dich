@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.explain import generate_explanation
 from app.features import CATEGORY_LABELS
+from app.merchants import get_or_create_merchant, risk_tier_for
 from app.ml.service import contributions, predict_probability
 from app.ml.synthetic import generate_dataset
 from app.models import (
@@ -153,16 +154,24 @@ def seed_users(db: Session) -> list[User]:
     return users
 
 
-def seed_merchants(db: Session) -> None:
+def seed_merchants(db: Session) -> list[Merchant]:
     from app.ml.synthetic import MERCHANTS
 
+    merchants: list[Merchant] = []
     seen = set()
     for name, category, country in MERCHANTS:
         if name in seen:
             continue
         seen.add(name)
-        risk = "high" if category in {"crypto", "gift_card", "gambling", "cash_advance"} else "medium" if category in {"electronics", "jewelry", "travel"} else "low"
-        db.add(Merchant(name=name, category=category, country=country, risk_tier=risk))
+        merchant = Merchant(
+            name=name,
+            category=category,
+            country=country,
+            risk_tier=risk_tier_for(category),
+        )
+        db.add(merchant)
+        merchants.append(merchant)
+    return merchants
 
 
 def _score_record(record: dict, rules: list[Rule], setting: Setting) -> dict:
@@ -195,7 +204,13 @@ def _score_record(record: dict, rules: list[Rule], setting: Setting) -> dict:
     }
 
 
-def seed_transactions(db: Session, rules: list[Rule], setting: Setting, analysts: list[User]) -> list[Case]:
+def seed_transactions(
+    db: Session,
+    rules: list[Rule],
+    setting: Setting,
+    analysts: list[User],
+    merchants: list[Merchant] | None = None,
+) -> list[Case]:
     records = generate_dataset(
         seed=17,
         days=30,
@@ -206,12 +221,30 @@ def seed_transactions(db: Session, rules: list[Rule], setting: Setting, analysts
     )
     now = utcnow()
     pending: list[tuple[Transaction, dict]] = []
+    # Đảm bảo merchant/user/rule đang chờ đã có id trước khi tham chiếu.
+    db.flush()
+    merchant_ids = {merchant.name: merchant.id for merchant in (merchants or [])}
+    if not merchant_ids:
+        merchant_ids = {
+            merchant.name: merchant.id
+            for merchant in db.scalars(select(Merchant)).all()
+        }
 
     for record in records:
         scored = _score_record(record, rules, setting)
         occurred_at = record["occurred_at"]
         if occurred_at.tzinfo is not None:
             occurred_at = occurred_at.replace(tzinfo=None)
+        merchant_id = merchant_ids.get(record["merchant_name"])
+        if merchant_id is None:
+            merchant = get_or_create_merchant(
+                db,
+                record["merchant_name"],
+                record["merchant_category"],
+                record.get("merchant_country", "VN"),
+            )
+            merchant_ids[merchant.name] = merchant.id
+            merchant_id = merchant.id
         txn = Transaction(
             external_id=record["external_id"],
             customer_id=record["customer_id"],
@@ -219,6 +252,7 @@ def seed_transactions(db: Session, rules: list[Rule], setting: Setting, analysts
             amount=record["amount"],
             currency="VND",
             channel=record["channel"],
+            merchant_id=merchant_id,
             merchant_name=record["merchant_name"],
             merchant_category=record["merchant_category"],
             merchant_country=record.get("merchant_country", "VN"),
@@ -403,10 +437,10 @@ def seed_demo_data(db: Session) -> None:
     users = seed_users(db)
     db.flush()
     analysts = [user for user in users if user.role == "analyst"]
-    seed_merchants(db)
+    merchants = seed_merchants(db)
     rules = seed_rules(db)
     db.flush()
-    seed_transactions(db, rules, setting, analysts)
+    seed_transactions(db, rules, setting, analysts, merchants)
 
 
 def seed_summary(db: Session) -> dict:

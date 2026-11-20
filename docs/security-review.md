@@ -45,7 +45,7 @@ và các lớp phòng thủ ở tầng HTTP.
 | 2 | Tài khoản demo có mật khẩu công khai | **Cao nếu public** | Trước khi mở cho người ngoài: đổi mật khẩu 3 tài khoản, hoặc `DEMO_MODE=false` và tạo admin mới |
 | 3 | Rate-limit lưu in-memory (mất khi restart, không chia sẻ giữa nhiều instance) | Thấp | 1 instance (Render free) thì ổn; scale thì chuyển Redis |
 | 4 | Chưa có 2FA, chưa có chính sách mật khẩu mạnh | Thấp | Đồ án không yêu cầu; có thể thêm TOTP sau |
-| 5 | Chưa có Alembic migration | Thấp | `create_all` đủ cho demo; production nên thêm migration |
+| 5 | Chưa có Alembic migration có version | Thấp | Đã có nâng cấp schema idempotent (`app/schema_migrations.py`); production nên chuyển sang Alembic |
 | 6 | Chưa có backup tự động DB | Trung bình | Render Postgres có backup (gói trả phí) hoặc `pg_dump` định kỳ |
 | 7 | Log/audit lưu IP + User-Agent | Thấp | Là dữ liệu cá nhân; chỉ admin đọc được, nên có thời hạn lưu trữ nếu dùng thật |
 | 8 | Phụ thuộc OpenRouter (bên thứ ba) | Thấp | Prompt chỉ gửi dữ liệu giao dịch demo; lỗi/timeout tự fallback offline |

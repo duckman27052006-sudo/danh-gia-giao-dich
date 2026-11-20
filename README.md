@@ -67,30 +67,62 @@ cd fraudlens
 .\run.ps1
 ```
 
-Script tự: tạo venv → cài dependency → **bật PostgreSQL local** → build frontend → chạy server.
+Script tự: tạo venv → cài dependency → **bật PostgreSQL cài trên Windows** → build frontend → chạy server.
 Mở http://127.0.0.1:8000.
 
 ### Cơ sở dữ liệu
 
-Ứng dụng dùng **PostgreSQL** cho mọi môi trường. Không cần cài Docker hay quyền admin:
-`scripts/dev-db.ps1` tự khởi tạo một cluster riêng trong `.pgdata/`, lắng nghe
-`127.0.0.1:5433`, user `postgres`, database `fraudlens` (trust auth — chỉ dùng cho máy cá nhân).
+Ứng dụng dùng **PostgreSQL** cho mọi môi trường. Trên Windows, mặc định dùng bản PostgreSQL
+cài sẵn (Windows service `postgresql-x64-18`, `127.0.0.1:5432`), role `fraudlens`, database
+`fraudlens`. `scripts/windows-db.ps1` tự bật service; nếu service bị **Disabled** hoặc không có
+quyền admin, script khởi động trực tiếp bằng `pg_ctl` trên data dir của bản cài.
+
+Tạo role và database một lần (dùng tài khoản `postgres`):
 
 ```powershell
-.\scripts\dev-db.ps1 start     # bật cluster + tạo database nếu chưa có
-.\scripts\dev-db.ps1 status    # kiểm tra server/database
-.\scripts\dev-db.ps1 stop      # tắt cluster
-.\scripts\dev-db.ps1 reset     # xoá sạch dữ liệu, lần chạy sau seed lại demo
+$env:PGPASSWORD = "<mat-khau-postgres>"
+& "$env:ProgramFiles\PostgreSQL\18\bin\psql.exe" -h 127.0.0.1 -p 5432 -U postgres `
+    -c "CREATE ROLE fraudlens LOGIN PASSWORD 'fraudlens_dev_password';"
+& "$env:ProgramFiles\PostgreSQL\18\bin\createdb.exe" -h 127.0.0.1 -p 5432 -U postgres -O fraudlens fraudlens
+& "$env:ProgramFiles\PostgreSQL\18\bin\createdb.exe" -h 127.0.0.1 -p 5432 -U postgres -O fraudlens fraudlens_test
 ```
 
-Chuỗi kết nối mặc định: `postgresql+psycopg://postgres@127.0.0.1:5433/fraudlens`.
+Hằng ngày:
+
+```powershell
+.\scripts\windows-db.ps1 start     # bật service / pg_ctl nếu chưa chạy
+.\scripts\windows-db.ps1 status    # kiểm tra server + chuỗi kết nối
+.\scripts\windows-db.ps1 stop      # tắt server
+```
+
+Chuỗi kết nối mặc định: `postgresql+psycopg://fraudlens:fraudlens_dev_password@127.0.0.1:5432/fraudlens`.
 Đổi bằng biến môi trường `DATABASE_URL`, ví dụ:
 
 ```powershell
 $env:DATABASE_URL = "postgresql+psycopg://user:pass@127.0.0.1:5432/fraudlens"
 ```
 
-Schema tạo bằng SQLAlchemy `create_all` ở lần khởi động đầu.
+Muốn PostgreSQL tự chạy khi khởi động máy (PowerShell quyền Administrator):
+
+```powershell
+Set-Service -Name postgresql-x64-18 -StartupType Automatic
+Start-Service postgresql-x64-18
+```
+
+Máy không cài PostgreSQL vẫn dùng được cluster riêng như trước:
+
+```powershell
+.\scripts\dev-db.ps1 start
+$env:DATABASE_URL = "postgresql+psycopg://postgres@127.0.0.1:5433/fraudlens"
+```
+
+Schema tạo bằng SQLAlchemy `create_all` ở lần khởi động đầu. Các database đã có dữ liệu
+được nâng cấp tự động bằng `app/schema_migrations.py` (idempotent: JSONB, CHECK constraint,
+khoá ngoại `ON DELETE`, index và trigger audit). Có thể chạy thủ công:
+
+```powershell
+.\.venv\Scripts\python .\scripts\migrate_db.py
+```
 
 ### Chạy tách backend/frontend để phát triển
 
@@ -98,7 +130,7 @@ Schema tạo bằng SQLAlchemy `create_all` ở lần khởi động đầu.
 # Terminal 1
 python -m venv .venv
 .\.venv\Scripts\pip install -r requirements-dev.txt
-.\scripts\dev-db.ps1 start
+.\scripts\windows-db.ps1 start
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 
 # Terminal 2
@@ -250,22 +282,22 @@ Huấn luyện lại:
 
 ## Kiểm thử
 
-Bộ test chạy trên PostgreSQL (không còn SQLite). Tạo database test một lần:
+Bộ test chạy trên PostgreSQL (không còn SQLite). Tạo database test một lần trên bản Windows:
 
 ```powershell
-.\scripts\dev-db.ps1 start                                                     # bật Postgres local
-& "$env:ProgramFiles\PostgreSQL\18\bin\createdb.exe" -h 127.0.0.1 -p 5433 -U postgres fraudlens_test
+.\scripts\windows-db.ps1 start
+& "$env:ProgramFiles\PostgreSQL\18\bin\createdb.exe" -h 127.0.0.1 -p 5432 -U postgres -O fraudlens fraudlens_test
 ```
 
 Sau đó:
 
 ```powershell
-.\.venv\Scripts\python -m pytest -q          # mặc định dùng fraudlens_test ở cổng 5433
+.\.venv\Scripts\python -m pytest -q          # mặc định dùng fraudlens_test ở cổng 5432
 .\.venv\Scripts\ruff.exe check app tests
 cd frontend; npm run build
 ```
 
-Muốn trỏ sang Postgres khác: `$env:TEST_DATABASE_URL = "postgresql+psycopg://user:pass@host:5432/fraudlens_test"`.
+Muốn trỏ sang Postgres khác: `$env:TEST_DATABASE_URL = "postgresql+psycopg://fraudlens:fraudlens_dev_password@127.0.0.1:5432/fraudlens_test"`.
 Conftest **xoá và tạo lại schema** mỗi lần chạy, và từ chối chạy nếu tên database không chứa `test`
 (tránh xoá nhầm database thật). CI chạy đúng bộ test này trên PostgreSQL service.
 
@@ -302,8 +334,10 @@ fraudlens/
 │   ├── main.py            # FastAPI app, static SPA, health
 │   ├── models.py          # SQLAlchemy models
 │   ├── scoring.py         # ingest + feature + score + case
+│   ├── merchants.py       # chuẩn hoá & get-or-create merchant
 │   ├── rules.py           # rule evaluator
 │   ├── explain.py         # AI/offline explanation
+│   ├── schema_migrations.py # nâng cấp schema idempotent cho DB đã có dữ liệu
 │   ├── seed.py            # dữ liệu demo
 │   ├── ml/                # synthetic data, train, serve, artifacts
 │   └── routers/           # auth, users, transactions, cases, rules, ...
@@ -313,27 +347,34 @@ fraudlens/
 │   └── lib/               # api, auth, format, types
 ├── tests/
 ├── docs/
-├── scripts/dev-db.ps1     # quản lý cluster PostgreSQL local (.pgdata, cổng 5433)
+├── scripts/windows-db.ps1 # bật PostgreSQL cài trên Windows (cổng 5432)
+├── scripts/dev-db.ps1     # (tuỳ chọn) cluster PostgreSQL riêng cho máy không cài sẵn
+├── scripts/migrate_db.py  # chạy nâng cấp schema thủ công
 ├── Dockerfile
 ├── docker-compose.yml
 └── render.yaml
 ```
 
-## Giao diện giới thiệu (Frutiger Aero)
+## Giao diện (Frutiger Aero)
 
-[`aero/`](aero/) là landing page độc lập dựng bằng HTML/CSS/JS thuần — không build, không thư viện,
-không phụ thuộc ảnh hay CDN ngoài. Trang giới thiệu sản phẩm theo phong cách Frutiger Aero
-(bầu trời, aurora, đồi cỏ, kính mờ, nút gel bóng) kèm **Risk Lab** cho phép kéo tham số để thấy
-điểm rủi ro thay đổi theo đúng công thức `ml × 0.55 + rule × 0.45`.
+Toàn bộ app chạy theo phong cách **Frutiger Aero**: bầu trời nắng có aurora và đồi cỏ, panel kính mờ,
+nút gel bóng, icon thuỷ tinh. Theme không nằm rải rác trong từng trang mà tập trung ở hai chỗ:
 
-Mở `aero/index.html` trong trình duyệt, hoặc xem chi tiết tại [`aero/README.md`](aero/README.md).
+- `frontend/tailwind.config.js` — map lại bảng màu (`ink` thành bề mặt sáng, `mint`/`coral`/`amber`/`azure`
+  thành tông đọc được trên nền sáng, `slate` đảo chiều để chữ phụ vẫn tương phản).
+- `frontend/src/index.css` — scene nền (sky + aurora + hills SVG), các lớp `.panel`, `.btn-primary`
+  (gel + vệt phản chiếu), `.field`, `.table-row`, `.sidebar-item`, override cho chart.
 
-![Landing page Frutiger Aero](aero/preview/desktop-hero.png)
+Muốn đổi lại theme thì sửa hai file trên rồi `cd frontend && npm run build`.
+
+![Dashboard](docs/screenshots/dashboard.png)
 
 ## Giới hạn & hướng phát triển
 
 - Dữ liệu huấn luyện & demo là **tổng hợp**, không phải dữ liệu ngân hàng thật. Cần thẩm định lại model trên dữ liệu thực trước khi dùng production.
-- Chưa có Alembic migration; schema tạo bằng `create_all` phù hợp demo. Production nên bổ sung migration.
+- Chưa có Alembic migration có version; schema dùng `create_all` + nâng cấp idempotent
+  (`app/schema_migrations.py`, chạy tay bằng `scripts/migrate_db.py`). Khi đội ngũ lớn hơn nên
+  chuyển sang Alembic để có lịch sử migration rõ ràng.
 - Rate-limit login lưu in-memory theo process; khi scale nhiều replica nên chuyển Redis.
 - Có thể mở rộng: import CSV, webhook realtime, phân ca trực, báo cáo PDF, SSO, notification email/Slack.
 

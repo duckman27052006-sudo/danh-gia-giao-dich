@@ -13,9 +13,10 @@ class Settings(BaseSettings):
 
     app_name: str = "FraudLens"
     environment: str = "development"
-    # PostgreSQL là database duy nhất của hệ thống (xem scripts/dev-db.ps1).
+    # Mặc định dùng PostgreSQL cài trên Windows (service postgresql-x64-18, cổng 5432).
     # Đổi bằng DATABASE_URL: postgresql+psycopg://user:pass@host:5432/fraudlens
-    database_url: str = "postgresql+psycopg://postgres@127.0.0.1:5433/fraudlens"
+    # Máy không cài PostgreSQL: dùng scripts/dev-db.ps1 (cluster .pgdata, cổng 5433).
+    database_url: str = "postgresql+psycopg://fraudlens:fraudlens_dev_password@127.0.0.1:5432/fraudlens"
     jwt_secret: str = "dev-only-change-me-in-production"
     access_token_minutes: int = 45
     refresh_token_days: int = 7

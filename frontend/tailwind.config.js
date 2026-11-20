@@ -4,42 +4,61 @@ export default {
   theme: {
     extend: {
       colors: {
+        /* "ink" now means the light Aero surfaces (page, cards, inputs) */
         ink: {
-          950: "#070B10",
-          900: "#0A1017",
-          850: "#0D141C",
-          800: "#111A24",
-          700: "#182430",
-          600: "#22313F",
+          950: "#f2fbff",
+          900: "#ffffff",
+          850: "#fbfeff",
+          800: "#f5fcff",
+          700: "#e6f7ff",
+          600: "#d3eefa",
         },
+        /* dark teal-greens: readable as text on glass, still "mint" in hue */
         mint: {
-          200: "#B9FBDD",
-          300: "#7CF0C0",
-          400: "#4BE3A6",
-          500: "#21C98A",
-          600: "#12A571",
-          700: "#0C7D57",
+          200: "#0a5f47",
+          300: "#0b7557",
+          400: "#0e8a63",
+          500: "#12a473",
+          600: "#0f8a61",
+          700: "#0b6b4b",
         },
         amber: {
-          400: "#F5C15C",
-          500: "#EAA83A",
+          400: "#a75f06",
+          500: "#c47110",
         },
         coral: {
-          400: "#FF8585",
-          500: "#F26060",
+          400: "#b93d1e",
+          500: "#ef5b34",
+        },
+        sky: {
+          300: "#38bdf8",
+          400: "#00a8e8",
+          500: "#0284c7",
         },
         azure: {
-          400: "#6CB6FF",
-          500: "#4795E8",
+          400: "#0369a1",
+          500: "#0284c7",
+        },
+        /* inverted slate ramp = readable secondary text on light glass */
+        slate: {
+          100: "#04384d",
+          200: "#0a4560",
+          300: "#14546c",
+          400: "#1b5e77",
+          500: "#2f7288",
+          600: "#3d7e95",
+          700: "#4f8ea6",
+          800: "#e8f6fb",
+          900: "#f4fbff",
         },
       },
       fontFamily: {
-        sans: ['"Be Vietnam Pro"', "system-ui", "sans-serif"],
+        sans: ['"Segoe UI"', "Frutiger", '"Trebuchet MS"', '"Be Vietnam Pro"', "system-ui", "sans-serif"],
         mono: ['"JetBrains Mono"', "ui-monospace", "monospace"],
       },
       boxShadow: {
-        glow: "0 0 0 1px rgba(75,227,166,0.25), 0 12px 40px -12px rgba(33,201,138,0.35)",
-        panel: "0 24px 60px -30px rgba(0,0,0,0.7)",
+        glow: "0 0 0 1px rgba(0, 168, 232, 0.25), 0 12px 40px -12px rgba(0, 168, 232, 0.35)",
+        panel: "0 24px 60px -30px rgba(0, 70, 110, 0.55)",
       },
       keyframes: {
         "fade-up": {

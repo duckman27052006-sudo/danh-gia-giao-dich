@@ -7,8 +7,8 @@ export function LogoMark({ size = 34 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden>
       <defs>
         <linearGradient id={gradientId} x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#7CF0C0" />
-          <stop offset="1" stopColor="#12A571" />
+          <stop stopColor="#38B000" />
+          <stop offset="1" stopColor="#0086BD" />
         </linearGradient>
       </defs>
       <path
@@ -16,7 +16,7 @@ export function LogoMark({ size = 34 }: { size?: number }) {
         stroke={`url(#${gradientId})`}
         strokeWidth="2.6"
         strokeLinejoin="round"
-        fill="rgba(75,227,166,0.06)"
+        fill="rgba(0,168,232,0.10)"
       />
       <path
         d="M22 32.5 28.8 39.5 43 24"

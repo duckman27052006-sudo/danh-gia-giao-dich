@@ -16,8 +16,8 @@ if [ ! -f frontend/dist/index.html ]; then
 fi
 
 echo "FraudLens: http://127.0.0.1:8000"
-echo "(can PostgreSQL dang chay; tren Windows dung .\\scripts\\dev-db.ps1 start)"
+echo "(can PostgreSQL dang chay o 127.0.0.1:5432; tren Windows dung .\\scripts\\windows-db.ps1 start)"
 
-# Mac dinh Postgres local. Doi bang bien moi truong DATABASE_URL neu can.
-export DATABASE_URL="${DATABASE_URL:-postgresql+psycopg://postgres@127.0.0.1:5433/fraudlens}"
+# Mac dinh Postgres cai tren may (cong 5432). Doi bang bien moi truong DATABASE_URL neu can.
+export DATABASE_URL="${DATABASE_URL:-postgresql+psycopg://fraudlens:fraudlens_dev_password@127.0.0.1:5432/fraudlens}"
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000

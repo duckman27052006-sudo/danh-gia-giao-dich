@@ -4,10 +4,11 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import Integer, func, select, text
 from sqlalchemy.orm import Session
 
 from app.features import build_context
+from app.merchants import get_or_create_merchant
 from app.ml.service import contributions, predict_probability
 from app.models import Case, CaseEvent, Setting, Transaction, utcnow
 from app.rules import evaluate_rules, load_enabled_rules
@@ -35,8 +36,15 @@ def get_settings_row(db: Session) -> Setting:
 def next_case_code(db: Session) -> str:
     year = utcnow().year
     prefix = f"CASE-{year}-"
-    count = db.scalar(select(func.count()).select_from(Case).where(Case.code.like(f"{prefix}%"))) or 0
-    return f"{prefix}{count + 1:04d}"
+    # Khoá advisory theo transaction để hai request đồng thời không sinh trùng code.
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext('fraudlens:case-code'))"))
+    latest_sequence = db.scalar(
+        select(func.max(func.split_part(Case.code, "-", 3).cast(Integer))).where(
+            Case.code.op("~")(f"^{prefix}[0-9]+$")
+        )
+    )
+    sequence = (latest_sequence or 0) + 1
+    return f"{prefix}{sequence:04d}"
 
 
 def build_runtime_context(db: Session, payload: TransactionIn, occurred_at: datetime) -> dict[str, Any]:
@@ -167,6 +175,12 @@ def ingest_transaction(
 ) -> Transaction:
     occurred_at = to_naive_utc(payload.occurred_at) if payload.occurred_at else utcnow()
     settings_row = get_settings_row(db)
+    merchant = get_or_create_merchant(
+        db,
+        payload.merchant_name,
+        payload.merchant_category,
+        payload.merchant_country,
+    )
 
     ctx = build_runtime_context(db, payload, occurred_at)
     ml_score, hits, rule_score, risk_score, signals, band, is_flagged = score_context(
@@ -180,6 +194,7 @@ def ingest_transaction(
         amount=payload.amount,
         currency=payload.currency.upper(),
         channel=payload.channel,
+        merchant_id=merchant.id,
         merchant_name=payload.merchant_name,
         merchant_category=payload.merchant_category,
         merchant_country=payload.merchant_country.upper(),

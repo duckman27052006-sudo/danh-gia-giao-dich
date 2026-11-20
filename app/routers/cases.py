@@ -194,6 +194,9 @@ def update_case(
             )
             if payload.status == "resolved":
                 case.resolved_at = utcnow()
+            elif case.status == "resolved":
+                # Reopen: xoá mốc hoàn tất cũ, quyết định vẫn được giữ làm lịch sử.
+                case.resolved_at = None
     if payload.priority is not None and payload.priority != case.priority:
         case.priority = payload.priority
         _event(db, case, "priority", f"Đổi ưu tiên: {before['priority']} → {payload.priority}", actor)

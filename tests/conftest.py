@@ -3,8 +3,8 @@ from __future__ import annotations
 import os
 
 # Bộ test chạy trên PostgreSQL (không còn SQLite). Mặc định dùng database test
-# của cluster local do scripts/dev-db.ps1 quản lý; đổi bằng TEST_DATABASE_URL.
-DEFAULT_TEST_DB = "postgresql+psycopg://postgres@127.0.0.1:5433/fraudlens_test"
+# của bản PostgreSQL cài trên Windows; đổi bằng TEST_DATABASE_URL.
+DEFAULT_TEST_DB = "postgresql+psycopg://fraudlens:fraudlens_dev_password@127.0.0.1:5432/fraudlens_test"
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DB)
 
 if "test" not in TEST_DATABASE_URL.lower():

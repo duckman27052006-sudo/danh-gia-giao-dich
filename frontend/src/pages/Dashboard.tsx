@@ -49,7 +49,7 @@ import { ScoreRing } from "@/components/ScoreRing";
 import { RiskBadge, PriorityBadge } from "@/components/Badges";
 import { Avatar } from "@/components/Avatar";
 
-const PIE_COLORS: Record<string, string> = { P1: "#FF8585", P2: "#F5C15C", P3: "#6E8299" };
+const PIE_COLORS: Record<string, string> = { P1: "#E5484D", P2: "#E8A33D", P3: "#7C93A8" };
 
 function chartDate(value: string) {
   return `${value.slice(8, 10)}/${value.slice(5, 7)}`;
@@ -92,7 +92,7 @@ function PriorityDonut({ data, total, stats }: { data: { name: string; value: nu
           <PieChart>
             <Pie data={pie} dataKey="value" nameKey="name" innerRadius={55} outerRadius={76} paddingAngle={3} stroke="none">
               {pie.map((entry) => (
-                <Cell key={entry.name} fill={PIE_COLORS[entry.name] ?? "#6E8299"} />
+                <Cell key={entry.name} fill={PIE_COLORS[entry.name] ?? "#7C93A8"} />
               ))}
             </Pie>
           </PieChart>
@@ -257,7 +257,7 @@ export function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-3 text-[10px] text-slate-500">
                   <span className="flex items-center gap-1.5">
-                    <span className="h-1.5 w-3 rounded-full bg-mint-400/70" /> Dòng tiền
+                    <span className="h-1.5 w-3 rounded-full bg-sky-400/70" /> Dòng tiền
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-coral-400" /> Gắn cờ
@@ -272,11 +272,11 @@ export function DashboardPage() {
                   <ComposedChart data={data.trend} margin={{ top: 4, right: 4, left: -14, bottom: 0 }}>
                     <defs>
                       <linearGradient id="volume-fill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#4BE3A6" stopOpacity={0.34} />
-                        <stop offset="100%" stopColor="#4BE3A6" stopOpacity={0} />
+                        <stop offset="0%" stopColor="#00A8E8" stopOpacity={0.34} />
+                        <stop offset="100%" stopColor="#00A8E8" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="rgba(255,255,255,0.045)" vertical={false} />
+                    <CartesianGrid stroke="rgba(4,60,90,0.10)" vertical={false} />
                     <XAxis
                       dataKey="date"
                       tickFormatter={chartDate}
@@ -292,17 +292,17 @@ export function DashboardPage() {
                       yAxisId="volume"
                       type="monotone"
                       dataKey="volume"
-                      stroke="#4BE3A6"
+                      stroke="#00A8E8"
                       strokeWidth={1.6}
                       fill="url(#volume-fill)"
                       name="Dòng tiền"
                     />
-                    <Bar yAxisId="count" dataKey="flagged" fill="#FF8585" opacity={0.75} barSize={days > 30 ? 4 : 7} radius={[2, 2, 0, 0]} name="Gắn cờ" />
+                    <Bar yAxisId="count" dataKey="flagged" fill="#E5484D" opacity={0.75} barSize={days > 30 ? 4 : 7} radius={[2, 2, 0, 0]} name="Gắn cờ" />
                     <Line
                       yAxisId="count"
                       type="monotone"
                       dataKey="confirmed"
-                      stroke="#7CF0C0"
+                      stroke="#38B000"
                       strokeWidth={1.4}
                       dot={false}
                       strokeDasharray="3 3"

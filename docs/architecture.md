@@ -95,16 +95,43 @@ Nếu không có key hoặc provider lỗi, service dùng template tiếng Việ
 
 | Bảng | Nội dung chính |
 |---|---|
-| `users` | email, role, password hash scrypt, active, last login |
-| `merchants` | tên, ngành, quốc gia, risk tier |
-| `transactions` | payload gốc + feature snapshot + ML/rule/risk score + rule hits + contributions |
+| `users` | email (unique, có unique index `lower(email)`), role, password hash scrypt, active, last login |
+| `merchants` | danh mục merchant: tên, ngành, quốc gia, risk tier |
+| `transactions` | payload gốc + `merchant_id` FK + feature snapshot + ML/rule/risk score + rule hits + contributions |
 | `cases` | mã case, priority, status, decision, assignee, SLA, risk score |
 | `case_notes` | ghi chú analyst, ghi chú AI, ghi chú decision |
-| `case_events` | timeline bất biến của case |
+| `case_events` | timeline của case |
 | `explanations` | nội dung AI/offline, provider, model, latency |
-| `rules` | điều kiện JSON, weight, severity, enabled, hit count |
-| `audit_logs` | actor, action, entity, before/after, IP, UA |
+| `rules` | điều kiện JSONB, weight, severity, enabled, hit count |
+| `audit_logs` | actor, action, entity, before/after, IP, UA — append-only |
 | `refresh_sessions` | hash refresh token, hết hạn, revoked |
+
+Các cột JSON (`rule_hits`, `contributions`, `conditions`, `meta`, `content`, `signals`,
+`before`, `after`) dùng **JSONB** để kiểm tra kiểu, index và truy vấn hiệu quả hơn `json`.
+
+`transactions` giữ cả `merchant_id` (chuẩn hoá, tham chiếu `merchants`) và snapshot
+`merchant_name/category/country`. Snapshot là chủ đích: audit phải tái lập được dữ liệu tại thời
+điểm chấm điểm, kể cả khi merchant đổi thông tin master.
+
+### 6.1. Ràng buộc & index
+
+- **CHECK constraint** cho enum nghiệp vụ (`role`, `risk_tier`, `channel`, `risk_band`,
+  `priority`, `status`, `decision`, `severity`, `kind`) và các khoảng số (score 0–100,
+  amount > 0, hour 0–23, velocity/amount_ratio/account_age ≥ 0).
+- **CHECK chéo**: case `resolved` bắt buộc có `decision` + `resolved_at`; settings chỉ có
+  `id = 1`, `high_threshold > review_threshold`, trọng số trong 0–1 và tổng > 0; rule phải có
+  `conditions` là JSON array không rỗng.
+- **Khoá ngoại có `ON DELETE`**: case/note/event/explanation thuộc case dùng `CASCADE`;
+  tham chiếu user dùng `SET NULL` để giữ lịch sử; `refresh_sessions.user_id` dùng `CASCADE`;
+  `transactions.merchant_id` dùng `SET NULL`.
+- **Index composite/partial** theo truy vấn nóng: `(customer_id, occurred_at)`,
+  `(risk_band, occurred_at)`, `(channel, occurred_at)`, partial index giao dịch bị gắn cờ,
+  `(status, sla_due_at)`, partial index case chưa resolved, `(case_id, created_at)` cho
+  note/event/explanation, `(action|entity_type|actor_id, created_at)` cho audit.
+- **Audit bất biến**: trigger `trg_audit_logs_immutable` chặn `UPDATE`/`DELETE` trên
+  `audit_logs`; audit không đặt FK tới `users` để không mất dấu khi user bị xoá.
+- **Sinh mã case an toàn**: `next_case_code()` lấy advisory lock theo transaction và tăng từ
+  mã lớn nhất, tránh trùng khi nhiều request ingest đồng thời.
 
 ## 7. Bảo mật
 
@@ -120,12 +147,15 @@ Nếu không có key hoặc provider lỗi, service dùng template tiếng Việ
 
 - Docker multi-stage: Node build SPA → Python runtime chỉ chứa artifact + dist.
 - Render blueprint tạo Postgres + web service, health check `/api/health`.
-- PostgreSQL là backend chính cho cả dev lẫn production (`psycopg` 3). Dev dùng cluster riêng
-  trong `.pgdata/` do `scripts/dev-db.ps1` quản lý (127.0.0.1:5433, không cần admin/Docker).
+- PostgreSQL là backend chính cho cả dev lẫn production (`psycopg` 3). Dev dùng bản PostgreSQL
+  cài trên Windows (`scripts/windows-db.ps1`, 127.0.0.1:5432, database `fraudlens`); máy không
+  cài sẵn có thể dùng cluster riêng `.pgdata/` qua `scripts/dev-db.ps1` (127.0.0.1:5433).
 - PostgreSQL là database duy nhất — app, bộ test và CI đều chạy trên PostgreSQL
   (test dùng database riêng `fraudlens_test`, conftest xoá & tạo lại schema mỗi lần chạy).
 - Cột thời gian dùng `UTCDateTime` (`app/models.py`): luôn lưu/đọc UTC naive để logic so sánh
   với `utcnow()` không lệch múi giờ (PostgreSQL trả aware cho cột `timestamptz`).
+- Database mới tạo bằng `create_all`; database đã có dữ liệu được nâng cấp bằng
+  `app/schema_migrations.py` (gọi trong `init_db()` hoặc chạy `scripts/migrate_db.py`).
 - Seed tự động khi DB rỗng và `SEED_ON_START=true`; đặt `DEMO_MODE=false` khi triển khai thật.
 
 ## 9. Quyết định thiết kế

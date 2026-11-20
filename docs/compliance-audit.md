@@ -4,7 +4,7 @@ Tài liệu này là **kết quả kiểm chứng thực tế** (không phải m
 *Hệ thống chấm điểm rủi ro giao dịch có AI giải thích cảnh báo* (Data + AI — Fraud Analytics).
 
 - Ngày audit: **19/11/2026**, cập nhật **20/11/2026** (bật LLM thật qua OpenRouter)
-- Môi trường: Windows, Python 3.14.5, Node 24, PostgreSQL 18.4 (cổng 5433), Chromium
+- Môi trường: Windows, Python 3.14.5, Node 24, PostgreSQL 18.4 (cổng 5432, bản cài Windows), Chromium
 - Phiên bản: commit `8d40aa4` + các thay đổi chuyển sang PostgreSQL trong lần audit này
 
 ## 1. Kết luận nhanh
@@ -107,7 +107,7 @@ timeline ghi `AI tạo bản giải thích (openrouter/openrouter/free)`.
 | Trang login/queue | phải tải cả recharts (457 KB) | không tải recharts (chỉ chunk dashboard/case) |
 | `GET /api/dashboard` | không nén, ~1,1 MB | **21 KB gzip**, 181 ms |
 | Asset tĩnh | không có cache header | `Cache-Control: immutable` 1 năm |
-| Chỉ mục DB | chỉ index đơn | thêm `(customer_id, occurred_at)`, `(is_flagged, occurred_at)`, `(status, sla_due_at)` |
+| Chỉ mục DB | chỉ index đơn | composite/partial index theo truy vấn nóng + JSONB CHECK + FK `ON DELETE` |
 | Seed | gọi LLM khi có key → khởi động 90 s+ | ép template offline → khởi động ~25 s |
 
 
@@ -124,7 +124,7 @@ timeline ghi `AI tạo bản giải thích (openrouter/openrouter/free)`.
 ## 4. Những gì đã chạy trong lần audit này
 
 ```text
-[PostgreSQL] .\scripts\dev-db.ps1 start        → cluster .pgdata, 127.0.0.1:5433, DB fraudlens
+[PostgreSQL] .\scripts\windows-db.ps1 start    → bản cài Windows, 127.0.0.1:5432, DB fraudlens
 [Seed]       khởi động app                     → users=4, merchants=48, transactions=5472,
                                                   cases=142, rules=8
 [DB check]   psql count(*)                     → transactions 5472 | cases 142 | rules 8 |
@@ -165,7 +165,7 @@ timeline ghi `AI tạo bản giải thích (openrouter/openrouter/free)`.
 |---|---|---|---|
 | 1 | Chưa có URL công khai | **Cao** (nếu đề bắt buộc) | Render Blueprint đã có: push repo → New Blueprint → chọn repo → Render tạo Postgres + web + `JWT_SECRET` tự động. Chi tiết ở README mục “Deploy online”. Không cần sửa code. |
 | 2 | ~~AI đang chạy template offline~~ | Đã xử lý | Đã bật OpenRouter trong `.env` (`.env` bị gitignore). Muốn đổi model chỉ cần sửa `AI_MODEL`; muốn dùng model local đặt `AI_BASE_URL` trỏ Ollama/LM Studio. |
-| 3 | Chưa có Alembic migration | Thấp | Schema tạo bằng `create_all` — đủ cho demo; production nên thêm migration. |
+| 3 | Chưa có Alembic migration có version | Thấp | Schema dùng `create_all` + nâng cấp idempotent (`app/schema_migrations.py`, `scripts/migrate_db.py`); production nên chuyển sang Alembic khi schema thay đổi thường xuyên. |
 | 4 | Rate-limit login lưu in-memory | Thấp | Ổn với 1 process; scale nhiều replica thì chuyển Redis. |
 | 5 | Dữ liệu & model là tổng hợp | Trung bình | Đã ghi rõ trong model card và README; cần thẩm định lại trên dữ liệu thật nếu dùng thật. |
 | 6 | Sai lệch nhỏ về stack UI so với gợi ý của đề (React thay Streamlit/Dash) | Thấp | Có thể bổ sung 1 trang Streamlit đọc API nếu giảng viên yêu cầu đúng stack. |

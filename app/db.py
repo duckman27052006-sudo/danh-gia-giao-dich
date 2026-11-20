@@ -45,5 +45,7 @@ def get_db() -> Iterator[Session]:
 
 def init_db() -> None:
     from app import models  # noqa: F401  (register mappers)
+    from app.schema_migrations import apply_schema_migrations
 
     Base.metadata.create_all(bind=engine)
+    apply_schema_migrations(engine)
