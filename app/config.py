@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-3-5-sonnet-latest"
     ai_timeout_seconds: float = 45.0
+    # Danh sách model dự phòng (phẩy ngăn cách), thử lần lượt khi model chính lỗi.
+    # Free tier của OpenRouter hay trả 429 nên nên khai báo 1-2 model free khác.
+    ai_fallback_models: str = ""
 
     model_dir: Path = BASE_DIR / "app" / "ml" / "artifacts"
 

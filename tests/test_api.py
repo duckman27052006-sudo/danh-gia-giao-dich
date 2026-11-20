@@ -219,6 +219,50 @@ def test_explanation_routes_to_openrouter(
     }
 
 
+def test_explanation_falls_back_to_next_free_model(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient, analyst_headers: dict[str, str]
+) -> None:
+    """Free tier hay trả 429: model chính lỗi thì tự chuyển sang model dự phòng."""
+    from app import explain
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "ai_enabled", True)
+    monkeypatch.setattr(settings, "ai_provider", "openrouter")
+    monkeypatch.setattr(settings, "openrouter_api_key", "or-test-key")
+    monkeypatch.setattr(settings, "ai_model", "openrouter/free")
+    monkeypatch.setattr(settings, "ai_fallback_models", "baidu/ernie-5.5-flash-preview:free")
+    monkeypatch.setattr(settings, "ai_base_url", "")
+
+    calls: list[str] = []
+
+    def fake_compat(info: explain.AIProviderInfo, prompt: str):
+        calls.append(info.model)
+        if info.model == "openrouter/free":
+            raise RuntimeError("Client error '429 Too Many Requests'")
+        return (
+            {
+                "summary": "Tóm tắt từ model dự phòng.",
+                "why_flagged": ["Tín hiệu 1", "Tín hiệu 2"],
+                "normal_comparison": "So với 30 ngày trước.",
+                "verification_questions": ["Câu hỏi 1?", "Câu hỏi 2?"],
+                "draft_note": "Ghi chú nháp.",
+            },
+            info.name,
+            info.model,
+        )
+
+    monkeypatch.setattr(explain, "_call_openai_compatible", fake_compat)
+
+    case = _create_case(client, analyst_headers)
+    response = client.post(f"/api/cases/{case['id']}/explain?force=true", headers=analyst_headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert calls == ["openrouter/free", "baidu/ernie-5.5-flash-preview:free"]
+    assert body["model"] == "baidu/ernie-5.5-flash-preview:free"
+    assert body["provider"] == "openrouter"
+    assert body["content"]["summary"] == "Tóm tắt từ model dự phòng."
+
+
 def test_case_note_and_timeline(client: TestClient, analyst_headers: dict[str, str]) -> None:
     case = _create_case(client, analyst_headers)
     note = client.post(

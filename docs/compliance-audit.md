@@ -35,7 +35,7 @@ repo đã có đủ cấu hình để deploy trong ~10 phút (xem mục 5).
 | 5 | Chấm risk score | ĐẠT | `app/scoring.py`: `ml_score × 55% + rule_score × 45%` (cấu hình được), cap 100, band low/medium/high/critical. |
 | 6 | Hiển thị case đáng ngờ | ĐẠT | `GET /api/cases` + trang Hàng chờ: 49 case mở, lọc theo trạng thái/ưu tiên/phụ trách, tìm kiếm, phân trang. |
 | 7 | Analyst cập nhật trạng thái điều tra | ĐẠT | `PATCH /api/cases/{id}`, nhận xử lý, phân công, đổi trạng thái, timeline. Thao tác thật trên UI đã kiểm chứng. |
-| 8 | AI tóm tắt vì sao bị gắn cờ | ĐẠT | `app/explain.py`: gọi LLM thật qua **OpenRouter** (`AI_BASE_URL`, tương thích OpenAI/Anthropic); đã chạy thật với `openai/gpt-4o-mini` — `provider=openrouter`, `latency_ms=8488`, nội dung tiếng Việt bám đúng số liệu. Không có key thì tự fallback template offline. Test `test_explanation_routes_to_openrouter` + `test_ai_explanation_offline_shape`. |
+| 8 | AI tóm tắt vì sao bị gắn cờ | ĐẠT | `app/explain.py`: gọi LLM thật qua **OpenRouter** (`AI_BASE_URL`, tương thích OpenAI/Anthropic). Hiện cấu hình **chỉ dùng model free** (`openrouter/free` + 2 model dự phòng `:free`, tự chuyển khi gặp 429/timeout). Đã chạy thật, nội dung tiếng Việt bám đúng số liệu. Không có key thì tự fallback template offline. Test `test_explanation_routes_to_openrouter`, `test_explanation_falls_back_to_next_free_model`, `test_ai_explanation_offline_shape`. |
 | 9 | So sánh với hành vi bình thường | ĐẠT | `app/explain.py::_history_stats` — thống kê 30 ngày: số giao dịch, chi tiêu TB, ngành quen thuộc, giờ quen thuộc. |
 | 10 | Gợi ý câu hỏi xác minh | ĐẠT | 4 câu theo ngữ cảnh (đêm, thiết bị mới, lệch IP, velocity); hiển thị dạng checklist trong Case detail. |
 | 11 | Tạo note xử lý | ĐẠT | `POST /api/cases/{id}/notes`, note nháp của AI lưu được vào case, timeline ghi nhận. Test `test_case_note_and_timeline`. |
@@ -72,6 +72,24 @@ Case `CASE-2026-0134` — giao dịch 49.000.000đ tại Agoda, điểm 94/100, 
 - Nội dung do LLM sinh bám đúng số liệu trong DB: “cao hơn 17.6 lần so với chi tiêu trung bình 2.777.868 VND”, “lúc 03:00”, “IP (ID) không khớp thẻ (VN)”, “ngành Du lịch”.
 - Kết quả được cache trong bảng `explanations`; mở lại case không gọi API lại (chỉ tốn tiền khi bấm “Tạo lại”).
 - Chi phí đo được với `openai/gpt-4o-mini`: ~$0,0004/case (≈10đ), toàn bộ 142 case demo < 1.500đ.
+
+### Chuyển sang model miễn phí
+
+Đo 7 model free của OpenRouter bằng đúng prompt của `app.explain` (case 49 triệu, 5 rule khớp):
+
+| Model | Kết quả | Thời gian | Ghi chú |
+|---|---|---|---|
+| `openrouter/free` | JSON đủ 5 field, 5 tín hiệu | 28,1 s | Router tự chọn model free còn chỗ |
+| `baidu/ernie-5.5-flash-preview:free` | Đủ field, nêu cả điểm ML/rule | 24,6 s | Chi tiết nhất |
+| `nvidia/nemotron-3-ultra-550b-a55b:free` | Đủ field | 26,5 s | Ổn định |
+| `google/gemma-4-31b-it:free` | 429 | — | Free tier bị giới hạn tần suất |
+| `google/gemma-4-26b-a4b-it:free` | 429 | — | |
+| `inclusionai/ling-3.2-flash:free` | 429 | — | |
+| `recursive/flint-v1.0:free` | Thiếu toàn bộ field | 46,7 s | Không dùng được |
+
+Cấu hình chốt: `AI_MODEL=openrouter/free`, dự phòng `baidu/ernie-5.5-flash-preview:free` và
+`nvidia/nemotron-3-ultra-550b-a55b:free`, `AI_TIMEOUT_SECONDS=75`. Vì free tier hay trả 429 và
+phản hồi 25–45 s, code có thêm chuỗi fallback (`AI_FALLBACK_MODELS`) để demo không bị chết giữa chừng.
 
 ## 3. Yêu cầu phi chức năng
 

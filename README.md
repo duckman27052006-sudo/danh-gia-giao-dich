@@ -184,6 +184,24 @@ AI_BASE_URL=http://127.0.0.1:11434/v1
 AI_MODEL=qwen2.5:7b
 ```
 
+### Chỉ dùng model miễn phí của OpenRouter
+
+OpenRouter có nhóm model `:free` (giá 0đ) và router `openrouter/free` tự chọn model free còn dung lượng:
+
+```env
+OPENROUTER_API_KEY=sk-or-v1-...
+AI_PROVIDER=openrouter
+AI_MODEL=openrouter/free
+AI_FALLBACK_MODELS=baidu/ernie-5.5-flash-preview:free,nvidia/nemotron-3-ultra-550b-a55b:free
+AI_TIMEOUT_SECONDS=75
+```
+
+- `AI_FALLBACK_MODELS`: nếu model chính trả **429**/timeout, hệ thống tự thử model kế tiếp rồi mới rơi về template offline.
+- Free tier giới hạn ~20 request/phút và có hạn mức theo ngày (OpenRouter nâng hạn mức khi tài khoản đã nạp credit); vì kết quả được cache theo case nên demo bình thường không chạm giới hạn.
+- Model free xếp hàng lâu hơn: **25–45 giây/phản hồi** là bình thường, nên đặt `AI_TIMEOUT_SECONDS` ≥ 75.
+
+Danh sách model free hiện có: `GET https://openrouter.ai/api/v1/models` rồi lọc `pricing.prompt == 0`.
+
 Đổi provider chỉ cần sửa `.env` rồi khởi động lại; kiểm tra bằng `GET /api/system/status`
 (trả `ai.provider`, `ai.model`, `ai.base_url`). Nhớ bật công tắc **“Bật AI giải thích”** trong trang Cấu hình.
 

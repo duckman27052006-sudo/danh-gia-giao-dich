@@ -4,7 +4,7 @@ import json
 import logging
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 from typing import Any
 
@@ -354,9 +354,21 @@ def _call_anthropic(info: AIProviderInfo, prompt: str) -> tuple[dict[str, Any], 
 
 
 def _call_provider(info: AIProviderInfo, prompt: str) -> tuple[dict[str, Any], str, str]:
+    """Gọi model chính, nếu lỗi thì thử lần lượt các model trong AI_FALLBACK_MODELS."""
     if info.name == "anthropic":
         return _call_anthropic(info, prompt)
-    return _call_openai_compatible(info, prompt)
+
+    models = [info.model]
+    models += [item.strip() for item in settings.ai_fallback_models.split(",") if item.strip()]
+    last_error: Exception | None = None
+    for model in dict.fromkeys(models):
+        candidate = info if model == info.model else replace(info, model=model)
+        try:
+            return _call_openai_compatible(candidate, prompt)
+        except Exception as exc:  # thử model kế tiếp
+            last_error = exc
+            logger.warning("AI model %s lỗi (%s), thử model kế tiếp", model, exc)
+    raise last_error or RuntimeError("Không gọi được model AI nào")
 
 
 def generate_explanation(db: Session, case: Case, actor: User | None, *, force: bool = False) -> Explanation:
