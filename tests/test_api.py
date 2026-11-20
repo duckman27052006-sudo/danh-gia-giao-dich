@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from fastapi.testclient import TestClient
 
 from tests.conftest import login
@@ -154,6 +155,68 @@ def test_ai_explanation_offline_shape(client: TestClient, analyst_headers: dict[
     second = client.post(f"/api/cases/{case['id']}/explain", headers=analyst_headers)
     assert second.status_code == 200
     assert second.json()["id"] == explanation["id"]
+
+
+def test_explanation_routes_to_openrouter(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient, analyst_headers: dict[str, str]
+) -> None:
+    """OpenRouter dùng chung endpoint /chat/completions; test bằng HTTP giả lập."""
+    import json as jsonlib
+
+    from app import explain
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "ai_enabled", True)
+    monkeypatch.setattr(settings, "ai_provider", "openrouter")
+    monkeypatch.setattr(settings, "openrouter_api_key", "or-test-key")
+    monkeypatch.setattr(settings, "ai_model", "openai/gpt-4o-mini")
+    monkeypatch.setattr(settings, "ai_base_url", "")
+
+    captured: dict = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            content = {
+                "summary": "Tóm tắt do LLM sinh cho case kiểm thử.",
+                "why_flagged": ["Số tiền lớn bất thường", "Thiết bị mới"],
+                "normal_comparison": "Chi tiêu cao hơn nhiều so với 30 ngày trước.",
+                "verification_questions": ["Anh/chị xác nhận giao dịch này?", "Thiết bị này là của anh/chị?"],
+                "draft_note": "Đã ghi nhận, chờ khách hàng phản hồi.",
+            }
+            return {"choices": [{"message": {"content": jsonlib.dumps(content, ensure_ascii=False)}}]}
+
+    def fake_post(url, **kwargs):
+        captured["url"] = url
+        captured["headers"] = kwargs.get("headers", {})
+        captured["body"] = kwargs.get("json", {})
+        return FakeResponse()
+
+    monkeypatch.setattr(explain.httpx, "post", fake_post)
+
+    case = _create_case(client, analyst_headers)
+    response = client.post(f"/api/cases/{case['id']}/explain?force=true", headers=analyst_headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["provider"] == "openrouter"
+    assert body["model"] == "openai/gpt-4o-mini"
+    assert captured["url"] == "https://openrouter.ai/api/v1/chat/completions"
+    assert captured["headers"]["Authorization"] == "Bearer or-test-key"
+    assert captured["body"]["model"] == "openai/gpt-4o-mini"
+    assert "LLM sinh" in body["content"]["summary"]
+
+    status = client.get("/api/system/status", headers=analyst_headers).json()
+    assert status["ai"] == {
+        "configured": True,
+        "provider": "openrouter",
+        "model": "openai/gpt-4o-mini",
+        "base_url": "https://openrouter.ai/api/v1",
+        "enabled": True,
+    }
 
 
 def test_case_note_and_timeline(client: TestClient, analyst_headers: dict[str, str]) -> None:

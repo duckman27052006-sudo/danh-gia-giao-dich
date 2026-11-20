@@ -7,6 +7,7 @@ from app.audit import log_action
 from app.config import settings
 from app.db import get_db
 from app.deps import get_current_user, require_roles
+from app.explain import resolve_ai_provider
 from app.ml.service import model_info
 from app.models import Setting, User
 from app.schemas import ModelInfo, SettingsOut, SettingsUpdate
@@ -73,18 +74,14 @@ def get_model_info(_: User = Depends(get_current_user)) -> dict:
 
 @router.get("/system/status")
 def system_status(_: User = Depends(get_current_user)) -> dict:
+    provider = resolve_ai_provider()
     return {
         "environment": settings.environment,
         "ai": {
-            "configured": bool(settings.openai_api_key or settings.anthropic_api_key),
-            "provider": (
-                "openai" if settings.openai_api_key else ("anthropic" if settings.anthropic_api_key else "offline")
-            ),
-            "model": (
-                settings.ai_model if settings.openai_api_key
-                else settings.anthropic_model if settings.anthropic_api_key
-                else "template-v1"
-            ),
+            "configured": provider is not None,
+            "provider": provider.name if provider else "offline",
+            "model": provider.model if provider else "template-v1",
+            "base_url": provider.base_url if provider else "",
             "enabled": settings.ai_enabled,
         },
         "demo_mode": settings.demo_mode,

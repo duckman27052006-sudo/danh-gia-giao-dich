@@ -151,13 +151,41 @@ Biến môi trường đầy đủ: [`.env.example`](.env.example).
 
 Mặc định hệ thống dùng **template offline** — nội dung vẫn dựa trên rule hit, đóng góp model và thống kê 30 ngày, không phải text giả. Để dùng LLM:
 
+**OpenRouter** (một key dùng được GPT/Claude/DeepSeek/Gemini…):
+
+```env
+OPENROUTER_API_KEY=sk-or-v1-...
+AI_PROVIDER=openrouter
+AI_MODEL=openai/gpt-4o-mini
+```
+
+**OpenAI trực tiếp:**
+
 ```env
 OPENAI_API_KEY=sk-...
+AI_PROVIDER=openai
 AI_MODEL=gpt-4o-mini
-# hoặc
+```
+
+**Anthropic trực tiếp:**
+
+```env
 ANTHROPIC_API_KEY=...
+AI_PROVIDER=anthropic
 ANTHROPIC_MODEL=claude-3-5-sonnet-latest
 ```
+
+**Model local** (Ollama / LM Studio / vLLM) — mọi gateway tương thích OpenAI:
+
+```env
+AI_PROVIDER=openai
+OPENAI_API_KEY=ollama
+AI_BASE_URL=http://127.0.0.1:11434/v1
+AI_MODEL=qwen2.5:7b
+```
+
+Đổi provider chỉ cần sửa `.env` rồi khởi động lại; kiểm tra bằng `GET /api/system/status`
+(trả `ai.provider`, `ai.model`, `ai.base_url`). Nhớ bật công tắc **“Bật AI giải thích”** trong trang Cấu hình.
 
 Prompt được giới hạn nghiêm ngặt: chỉ dùng dữ liệu giao dịch, không khẳng định gian lận, trả JSON có schema cố định. Nếu provider lỗi/timeout, hệ thống fallback offline và ghi rõ `offline-fallback`.
 

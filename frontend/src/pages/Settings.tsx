@@ -249,9 +249,11 @@ export function SettingsPage() {
                 <span className="text-[10.5px] text-slate-300">
                   {status.data?.ai.provider === "openai"
                     ? "OpenAI"
-                    : status.data?.ai.provider === "anthropic"
-                      ? "Anthropic"
-                      : "Offline template"}
+                    : status.data?.ai.provider === "openrouter"
+                      ? "OpenRouter"
+                      : status.data?.ai.provider === "anthropic"
+                        ? "Anthropic"
+                        : "Offline template"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -276,7 +278,8 @@ export function SettingsPage() {
             {!status.data?.ai.configured && (
               <div className="mt-4 rounded-lg border border-amber-400/15 bg-amber-500/[0.05] px-3 py-2.5">
                 <p className="text-[9.5px] leading-relaxed text-slate-500">
-                  Đặt <span className="font-mono text-slate-300">OPENAI_API_KEY</span> hoặc{" "}
+                  Đặt <span className="font-mono text-slate-300">OPENROUTER_API_KEY</span>,{" "}
+                  <span className="font-mono text-slate-300">OPENAI_API_KEY</span> hoặc{" "}
                   <span className="font-mono text-slate-300">ANTHROPIC_API_KEY</span> trong biến môi trường để bật giải
                   thích bằng LLM. Khi chưa có key, hệ thống dùng template offline dựa trên tín hiệu thật.
                 </p>

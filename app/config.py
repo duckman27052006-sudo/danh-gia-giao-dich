@@ -27,11 +27,15 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
 
     ai_enabled: bool = True
-    ai_provider: str = "auto"  # auto | openai | anthropic | offline
+    ai_provider: str = "auto"  # auto | openai | openrouter | anthropic | offline
     ai_model: str = "gpt-4o-mini"
-    anthropic_model: str = "claude-3-5-sonnet-latest"
+    # Để trống = dùng endpoint mặc định của provider. Ví dụ OpenRouter:
+    #   AI_BASE_URL=https://openrouter.ai/api/v1
+    ai_base_url: str = ""
     openai_api_key: str = ""
+    openrouter_api_key: str = ""
     anthropic_api_key: str = ""
+    anthropic_model: str = "claude-3-5-sonnet-latest"
     ai_timeout_seconds: float = 45.0
 
     model_dir: Path = BASE_DIR / "app" / "ml" / "artifacts"

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
@@ -14,6 +16,8 @@ from app.config import settings
 from app.features import CATEGORY_LABELS, CHANNEL_LABELS, format_vnd, local_hour
 from app.models import Case, Explanation, Transaction, User
 from app.scoring import get_settings_row
+
+logger = logging.getLogger("fraudlens.ai")
 
 DISCLAIMER = (
     "Đây là bản tóm tắt hỗ trợ điều tra do hệ thống tạo, không phải kết luận gian lận. "
@@ -248,36 +252,94 @@ def _normalize_content(raw: dict[str, Any], txn: Transaction, stats: dict[str, A
     return content
 
 
-def _call_openai(prompt: str) -> tuple[dict[str, Any], str, str]:
-    response = httpx.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers={"Authorization": f"Bearer {settings.openai_api_key}"},
-        json={
-            "model": settings.ai_model,
-            "temperature": 0.2,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-        },
-        timeout=settings.ai_timeout_seconds,
-    )
+DEFAULT_BASE_URLS = {
+    "openai": "https://api.openai.com/v1",
+    "openrouter": "https://openrouter.ai/api/v1",
+    "anthropic": "https://api.anthropic.com",
+}
+
+
+@dataclass(frozen=True)
+class AIProviderInfo:
+    name: str
+    api_key: str
+    base_url: str
+    model: str
+
+
+def resolve_ai_provider() -> AIProviderInfo | None:
+    """Chọn provider AI đang dùng; ``None`` nghĩa là chỉ có template offline.
+
+    ``AI_PROVIDER=auto`` ưu tiên OpenRouter → OpenAI → Anthropic theo key có sẵn.
+    ``AI_BASE_URL`` cho phép trỏ sang gateway tương thích OpenAI (OpenRouter,
+    Ollama, LM Studio, vLLM...).
+    """
+    choice = (settings.ai_provider or "auto").strip().lower()
+    if choice == "offline":
+        return None
+
+    keys = {
+        "openrouter": (settings.openrouter_api_key.strip(), settings.ai_model),
+        "openai": (settings.openai_api_key.strip(), settings.ai_model),
+        "anthropic": (settings.anthropic_api_key.strip(), settings.anthropic_model),
+    }
+    order = ["openrouter", "openai", "anthropic"] if choice == "auto" else [choice]
+    base_override = settings.ai_base_url.strip()
+    for name in order:
+        entry = keys.get(name)
+        if entry is None or not entry[0]:
+            continue
+        api_key, model = entry
+        return AIProviderInfo(
+            name=name,
+            api_key=api_key,
+            base_url=(base_override or DEFAULT_BASE_URLS[name]).rstrip("/"),
+            model=model,
+        )
+    return None
+
+
+def _call_openai_compatible(info: AIProviderInfo, prompt: str) -> tuple[dict[str, Any], str, str]:
+    """Gọi endpoint /chat/completions kiểu OpenAI (OpenAI, OpenRouter, Ollama...)."""
+    headers = {
+        "Authorization": f"Bearer {info.api_key}",
+        "Content-Type": "application/json",
+    }
+    if info.name == "openrouter":
+        # OpenRouter dùng hai header này để gắn app trên dashboard; không bắt buộc.
+        headers["HTTP-Referer"] = "https://fraudlens.local"
+        headers["X-Title"] = "FraudLens"
+
+    body: dict[str, Any] = {
+        "model": info.model,
+        "temperature": 0.2,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+    }
+    url = f"{info.base_url}/chat/completions"
+    response = httpx.post(url, headers=headers, json=body, timeout=settings.ai_timeout_seconds)
+    if response.status_code == 400 and "response_format" in body:
+        # Một số model trên OpenRouter không hỗ trợ json_object → thử lại không kèm.
+        body.pop("response_format")
+        response = httpx.post(url, headers=headers, json=body, timeout=settings.ai_timeout_seconds)
     response.raise_for_status()
     payload = response.json()
-    return _extract_json(payload["choices"][0]["message"]["content"]), "openai", settings.ai_model
+    return _extract_json(payload["choices"][0]["message"]["content"]), info.name, info.model
 
 
-def _call_anthropic(prompt: str) -> tuple[dict[str, Any], str, str]:
+def _call_anthropic(info: AIProviderInfo, prompt: str) -> tuple[dict[str, Any], str, str]:
     response = httpx.post(
-        "https://api.anthropic.com/v1/messages",
+        f"{info.base_url}/v1/messages",
         headers={
-            "x-api-key": settings.anthropic_api_key,
+            "x-api-key": info.api_key,
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
         },
         json={
-            "model": settings.anthropic_model,
+            "model": info.model,
             "max_tokens": 1500,
             "temperature": 0.2,
             "system": SYSTEM_PROMPT,
@@ -288,16 +350,13 @@ def _call_anthropic(prompt: str) -> tuple[dict[str, Any], str, str]:
     response.raise_for_status()
     payload = response.json()
     text = "".join(block.get("text", "") for block in payload.get("content", []))
-    return _extract_json(text), "anthropic", settings.anthropic_model
+    return _extract_json(text), info.name, info.model
 
 
-def _call_provider(prompt: str) -> tuple[dict[str, Any], str, str]:
-    provider = settings.ai_provider.lower()
-    if provider in {"openai"} or (provider == "auto" and settings.openai_api_key):
-        return _call_openai(prompt)
-    if provider in {"anthropic"} or (provider == "auto" and settings.anthropic_api_key):
-        return _call_anthropic(prompt)
-    raise RuntimeError("Không cấu hình AI provider")
+def _call_provider(info: AIProviderInfo, prompt: str) -> tuple[dict[str, Any], str, str]:
+    if info.name == "anthropic":
+        return _call_anthropic(info, prompt)
+    return _call_openai_compatible(info, prompt)
 
 
 def generate_explanation(db: Session, case: Case, actor: User | None, *, force: bool = False) -> Explanation:
@@ -312,16 +371,18 @@ def generate_explanation(db: Session, case: Case, actor: User | None, *, force: 
     signals = build_signals(case, txn, stats)
     category_label = CATEGORY_LABELS.get(txn.merchant_category, txn.merchant_category)
     settings_row = get_settings_row(db)
+    provider_info = resolve_ai_provider()
 
     started = time.perf_counter()
     provider = "offline"
     model = "template-v1"
     content: dict[str, Any]
-    if settings.ai_enabled and settings_row.ai_enabled and (settings.openai_api_key or settings.anthropic_api_key):
+    if settings.ai_enabled and settings_row.ai_enabled and provider_info is not None:
         try:
-            raw, provider, model = _call_provider(_prompt(txn, stats, signals))
+            raw, provider, model = _call_provider(provider_info, _prompt(txn, stats, signals))
             content = _normalize_content(raw, txn, stats, category_label)
-        except Exception:
+        except Exception as exc:
+            logger.warning("AI provider %s lỗi, dùng template offline: %s", provider_info.name, exc)
             content = _offline_content(txn, stats, category_label)
             provider, model = "offline-fallback", "template-v1"
     else:
