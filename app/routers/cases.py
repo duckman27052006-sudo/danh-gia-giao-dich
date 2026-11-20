@@ -6,6 +6,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.audit import log_action
+from app.config import settings
 from app.db import get_db
 from app.deps import get_current_user, require_roles
 from app.explain import generate_explanation
@@ -327,6 +328,21 @@ def explain_case(
     case = db.get(Case, case_id)
     if case is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Không tìm thấy case")
+    if force:
+        latest = db.scalar(
+            select(Explanation)
+            .where(Explanation.case_id == case.id)
+            .order_by(Explanation.created_at.desc())
+            .limit(1)
+        )
+        if latest is not None:
+            elapsed = (utcnow() - latest.created_at).total_seconds()
+            if elapsed < settings.explain_cooldown_seconds:
+                raise HTTPException(
+                    status.HTTP_429_TOO_MANY_REQUESTS,
+                    f"Vừa tạo giải thích {int(elapsed)}s trước, thử lại sau "
+                    f"{settings.explain_cooldown_seconds - int(elapsed)}s",
+                )
     explanation = generate_explanation(db, case, actor, force=force)
     _event(
         db,

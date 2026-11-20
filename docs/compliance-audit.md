@@ -99,15 +99,27 @@ timeline ghi `AI tạo bản giải thích (openrouter/openrouter/free)`.
 
 ## 3. Yêu cầu phi chức năng
 
+### Tối ưu hiệu năng (đo trên máy local)
+
+| Hạng mục | Trước | Sau |
+|---|---|---|
+| JS gói đầu vào | 398 KB (109 KB gzip) | **264 KB (82 KB gzip)**, phần còn lại tách theo trang |
+| Trang login/queue | phải tải cả recharts (457 KB) | không tải recharts (chỉ chunk dashboard/case) |
+| `GET /api/dashboard` | không nén, ~1,1 MB | **21 KB gzip**, 181 ms |
+| Asset tĩnh | không có cache header | `Cache-Control: immutable` 1 năm |
+| Chỉ mục DB | chỉ index đơn | thêm `(customer_id, occurred_at)`, `(is_flagged, occurred_at)`, `(status, sla_due_at)` |
+| Seed | gọi LLM khi có key → khởi động 90 s+ | ép template offline → khởi động ~25 s |
+
+
 | Yêu cầu | Trạng thái | Cách đáp ứng |
 |---|---|---|
-| Bảo mật | ĐẠT | scrypt (N=2^14) hash mật khẩu, JWT HS256, refresh token hash SHA-256 trong DB + thu hồi, rate-limit login 6 lần/5 phút, security headers, whitelist field khi tạo rule |
+| Bảo mật | ĐẠT | scrypt (N=2^14), JWT HS256, refresh token hash SHA-256 + xoay vòng + thu hồi, rate-limit login 6/5 phút, fail-fast cấu hình production, CSP + HSTS + COOP, `ALLOWED_HOSTS`, chặn body > 1 MB, cooldown gọi AI. Chi tiết: [`security-review.md`](security-review.md) |
 | Khả năng giải thích | ĐẠT | Rule hit + trọng số, đóng góp feature của model, so sánh baseline 30 ngày, model card |
 | Kiểm soát con người | ĐẠT | UI disclaimer + API `confirm` + audit bất biến |
 | Dữ liệu nhạy cảm | ĐẠT | 100% dữ liệu demo tổng hợp, không PII thật |
 | Vận hành | ĐẠT | `/api/health` trả `database/model/model_auc`, seed idempotent, Docker, `.env.example` |
 | Kiểm thử | ĐẠT | 10 API test × 2 backend (PostgreSQL + SQLite), ruff sạch, `tsc` + `vite build` sạch |
-| Hiệu năng | ĐẠT (quy mô demo) | 5.472 giao dịch/142 case: dashboard phản hồi < 300 ms trên máy local |
+| Hiệu năng | ĐẠT (quy mô demo) | 5.472 giao dịch/142 case: `GET /api/dashboard` **181 ms**, 21 KB sau gzip; JS tách theo trang, trang login không tải chunk biểu đồ (457 KB) |
 
 ## 4. Những gì đã chạy trong lần audit này
 

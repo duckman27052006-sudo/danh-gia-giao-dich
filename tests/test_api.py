@@ -263,6 +263,73 @@ def test_explanation_falls_back_to_next_free_model(
     assert body["content"]["summary"] == "Tóm tắt từ model dự phòng."
 
 
+def test_security_headers_and_csp(client: TestClient) -> None:
+    api = client.get("/api/health")
+    assert api.headers["x-content-type-options"] == "nosniff"
+    assert api.headers["x-frame-options"] == "DENY"
+    assert api.headers["cache-control"] == "no-store"
+
+    page = client.get("/")
+    assert page.status_code == 200
+    csp = page.headers["content-security-policy"]
+    assert "default-src 'self'" in csp
+    assert "frame-ancestors 'none'" in csp
+
+
+def test_production_rejects_unsafe_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app import main as app_main
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "jwt_secret", "dev-only-change-me-in-production")
+    with pytest.raises(RuntimeError, match="JWT_SECRET"):
+        app_main._validate_production_config()
+
+    monkeypatch.setattr(settings, "jwt_secret", "x" * 40)
+    monkeypatch.setattr(settings, "cookie_secure", False)
+    with pytest.raises(RuntimeError, match="COOKIE_SECURE"):
+        app_main._validate_production_config()
+
+    monkeypatch.setattr(settings, "cookie_secure", True)
+    monkeypatch.setattr(settings, "demo_mode", False)
+    app_main._validate_production_config()
+
+
+def test_explain_regeneration_is_rate_limited(client: TestClient, analyst_headers: dict[str, str]) -> None:
+    case = _create_case(client, analyst_headers)
+    first = client.post(f"/api/cases/{case['id']}/explain?force=true", headers=analyst_headers)
+    assert first.status_code == 200
+    again = client.post(f"/api/cases/{case['id']}/explain?force=true", headers=analyst_headers)
+    assert again.status_code == 429
+    cached = client.post(f"/api/cases/{case['id']}/explain", headers=analyst_headers)
+    assert cached.status_code == 200
+    assert cached.json()["id"] == first.json()["id"]
+
+
+def test_seed_explanation_never_calls_llm(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient, analyst_headers: dict[str, str]
+) -> None:
+    """Seed phải dùng template offline: khởi động nhanh, không đốt quota AI."""
+    from app import explain
+    from app.config import settings
+    from app.db import SessionLocal
+    from app.models import Case
+
+    monkeypatch.setattr(settings, "openrouter_api_key", "or-test-key")
+    monkeypatch.setattr(settings, "ai_provider", "openrouter")
+    called: list[int] = []
+    monkeypatch.setattr(explain, "_call_provider", lambda *a, **k: called.append(1))
+
+    case = _create_case(client, analyst_headers)
+    with SessionLocal() as db:
+        entity = db.get(Case, case["id"])
+        assert entity is not None
+        explanation = explain.generate_explanation(db, entity, None, force=True, use_llm=False)
+        db.commit()
+        assert explanation.provider == "offline"
+    assert called == []
+
+
 def test_case_note_and_timeline(client: TestClient, analyst_headers: dict[str, str]) -> None:
     case = _create_case(client, analyst_headers)
     note = client.post(

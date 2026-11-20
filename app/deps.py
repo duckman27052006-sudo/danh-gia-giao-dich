@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import get_db
 from app.models import User
 from app.security import decode_access_token
@@ -36,6 +37,15 @@ def require_roles(*roles: str) -> Callable[..., User]:
 
 
 def client_meta(request: Request) -> tuple[str, str]:
-    forwarded = request.headers.get("x-forwarded-for", "")
-    ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "")
+    """IP dùng cho audit/rate-limit.
+
+    Chỉ đọc ``X-Forwarded-For`` khi TRUST_PROXY_HEADERS=true — nếu không, kẻ tấn công
+    có thể gửi header giả để né rate-limit đăng nhập.
+    """
+    ip = ""
+    if settings.trust_proxy_headers:
+        forwarded = request.headers.get("x-forwarded-for", "")
+        ip = forwarded.split(",")[0].strip() if forwarded else ""
+    if not ip and request.client is not None:
+        ip = request.client.host
     return ip, request.headers.get("user-agent", "")[:255]

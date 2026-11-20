@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -122,6 +123,12 @@ class Transaction(Base):
     model_version: Mapped[str] = mapped_column(String(30), default="untrained")
     is_simulated: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Truy vấn nóng: dựng lịch sử theo khách hàng và đếm giao dịch bị gắn cờ theo ngày.
+    __table_args__ = (
+        Index("ix_transactions_customer_occurred", "customer_id", "occurred_at"),
+        Index("ix_transactions_flagged_occurred", "is_flagged", "occurred_at"),
+    )
+
     case: Mapped[Case | None] = relationship(back_populates="transaction", uselist=False)
 
 
@@ -149,6 +156,9 @@ class Case(Base):
     explanations: Mapped[list[Explanation]] = relationship(
         back_populates="case", cascade="all, delete-orphan"
     )
+
+    # Hàng chờ lọc theo trạng thái và sắp xếp/đếm SLA quá hạn.
+    __table_args__ = (Index("ix_cases_status_sla", "status", "sla_due_at"),)
 
 
 class CaseNote(Base):

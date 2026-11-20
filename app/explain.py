@@ -371,7 +371,19 @@ def _call_provider(info: AIProviderInfo, prompt: str) -> tuple[dict[str, Any], s
     raise last_error or RuntimeError("Không gọi được model AI nào")
 
 
-def generate_explanation(db: Session, case: Case, actor: User | None, *, force: bool = False) -> Explanation:
+def generate_explanation(
+    db: Session,
+    case: Case,
+    actor: User | None,
+    *,
+    force: bool = False,
+    use_llm: bool = True,
+) -> Explanation:
+    """Tạo giải thích cho case.
+
+    ``use_llm=False`` ép dùng template offline — dùng cho seed dữ liệu demo để
+    khởi động nhanh và không đốt quota/chi phí gọi model.
+    """
     existing = db.scalar(
         select(Explanation).where(Explanation.case_id == case.id).order_by(Explanation.created_at.desc()).limit(1)
     )
@@ -383,7 +395,7 @@ def generate_explanation(db: Session, case: Case, actor: User | None, *, force: 
     signals = build_signals(case, txn, stats)
     category_label = CATEGORY_LABELS.get(txn.merchant_category, txn.merchant_category)
     settings_row = get_settings_row(db)
-    provider_info = resolve_ai_provider()
+    provider_info = resolve_ai_provider() if use_llm else None
 
     started = time.perf_counter()
     provider = "offline"

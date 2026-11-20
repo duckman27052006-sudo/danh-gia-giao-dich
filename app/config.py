@@ -41,11 +41,28 @@ class Settings(BaseSettings):
     # Free tier của OpenRouter hay trả 429 nên nên khai báo 1-2 model free khác.
     ai_fallback_models: str = ""
 
+    # --- Vận hành / bảo mật ---
+    docs_enabled: bool | None = None  # None = bật ở dev, tắt ở production
+    allowed_hosts: str = ""  # ví dụ: "fraudlens.onrender.com,localhost,127.0.0.1"
+    trust_proxy_headers: bool = False  # bật khi chạy sau reverse proxy tin cậy
+    explain_cooldown_seconds: int = 20  # chống spam tạo lại giải thích (tốn quota AI)
+    max_body_bytes: int = 1_000_000  # chặn request body quá lớn
+
     model_dir: Path = BASE_DIR / "app" / "ml" / "artifacts"
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def allowed_host_list(self) -> list[str]:
+        return [host.strip() for host in self.allowed_hosts.split(",") if host.strip()]
+
+    @property
+    def docs_visible(self) -> bool:
+        if self.docs_enabled is not None:
+            return self.docs_enabled
+        return not self.is_production
 
     @property
     def is_production(self) -> bool:

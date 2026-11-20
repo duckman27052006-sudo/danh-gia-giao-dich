@@ -242,6 +242,12 @@ Huấn luyện lại:
 - Audit log ghi actor, action, entity, before/after, IP, user-agent; không cho sửa qua API.
 - Case đã có kết luận **không thể ghi đè**; đóng case bắt buộc có decision của analyst.
 - Production: bật `COOKIE_SECURE=true`, `DEMO_MODE=false`, dùng `JWT_SECRET` ngẫu nhiên ≥ 32 ký tự.
+- **Fail-fast**: chạy với `ENVIRONMENT=production` mà secret yếu / cookie không Secure / CORS `*` thì app **từ chối khởi động**.
+- Swagger tự tắt ở production; trang SPA có CSP, HSTS (production), `X-Frame-Options: DENY`, `nosniff`, COOP.
+- Chống lạm dụng: cooldown 20 s cho “tạo lại giải thích AI”, giới hạn body 1 MB, `ALLOWED_HOSTS` chống Host injection.
+- `X-Forwarded-For` chỉ được tin cậy khi `TRUST_PROXY_HEADERS=true` (tránh giả IP để né rate-limit).
+
+🔒 Chi tiết đầy đủ và checklist trước khi public: [`docs/security-review.md`](docs/security-review.md).
 
 ## Kiểm thử
 

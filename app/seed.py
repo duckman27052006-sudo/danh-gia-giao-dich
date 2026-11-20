@@ -380,6 +380,7 @@ def seed_transactions(db: Session, rules: list[Rule], setting: Setting, analysts
     db.commit()
 
     # Sinh sẵn bản giải thích offline cho 3 case P1 đang mở để demo UI.
+    # Cố ý dùng template offline: seed phải chạy trong vài giây và không gọi LLM.
     top_open = sorted(
         [case for case in cases if case.status != "resolved"],
         key=lambda case: case.risk_score,
@@ -388,7 +389,7 @@ def seed_transactions(db: Session, rules: list[Rule], setting: Setting, analysts
     for case in top_open:
         db.refresh(case)
         if case.transaction is not None:
-            generate_explanation(db, case, None, force=True)
+            generate_explanation(db, case, None, force=True, use_llm=False)
     db.commit()
     return cases
 
