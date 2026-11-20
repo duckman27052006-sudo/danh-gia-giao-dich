@@ -3,7 +3,7 @@
 Tài liệu này là **kết quả kiểm chứng thực tế** (không phải mô tả dự định) cho đề tài 10:
 *Hệ thống chấm điểm rủi ro giao dịch có AI giải thích cảnh báo* (Data + AI — Fraud Analytics).
 
-- Ngày audit: **19/11/2026**
+- Ngày audit: **19/11/2026**, cập nhật **20/11/2026** (bật LLM thật qua OpenRouter)
 - Môi trường: Windows, Python 3.14.5, Node 24, PostgreSQL 18.4 (cổng 5433), Chromium
 - Phiên bản: commit `8d40aa4` + các thay đổi chuyển sang PostgreSQL trong lần audit này
 
@@ -35,7 +35,7 @@ repo đã có đủ cấu hình để deploy trong ~10 phút (xem mục 5).
 | 5 | Chấm risk score | ĐẠT | `app/scoring.py`: `ml_score × 55% + rule_score × 45%` (cấu hình được), cap 100, band low/medium/high/critical. |
 | 6 | Hiển thị case đáng ngờ | ĐẠT | `GET /api/cases` + trang Hàng chờ: 49 case mở, lọc theo trạng thái/ưu tiên/phụ trách, tìm kiếm, phân trang. |
 | 7 | Analyst cập nhật trạng thái điều tra | ĐẠT | `PATCH /api/cases/{id}`, nhận xử lý, phân công, đổi trạng thái, timeline. Thao tác thật trên UI đã kiểm chứng. |
-| 8 | AI tóm tắt vì sao bị gắn cờ | ĐẠT (có điều kiện) | `app/explain.py`: gọi OpenAI/Anthropic thật; **không có API key thì dùng template offline** dựa trên dữ liệu thật. Test `test_ai_explanation_offline_shape` khẳng định `provider=offline`, ≥2 lý do, ≥3 câu hỏi xác minh. |
+| 8 | AI tóm tắt vì sao bị gắn cờ | ĐẠT | `app/explain.py`: gọi LLM thật qua **OpenRouter** (`AI_BASE_URL`, tương thích OpenAI/Anthropic); đã chạy thật với `openai/gpt-4o-mini` — `provider=openrouter`, `latency_ms=8488`, nội dung tiếng Việt bám đúng số liệu. Không có key thì tự fallback template offline. Test `test_explanation_routes_to_openrouter` + `test_ai_explanation_offline_shape`. |
 | 9 | So sánh với hành vi bình thường | ĐẠT | `app/explain.py::_history_stats` — thống kê 30 ngày: số giao dịch, chi tiêu TB, ngành quen thuộc, giờ quen thuộc. |
 | 10 | Gợi ý câu hỏi xác minh | ĐẠT | 4 câu theo ngữ cảnh (đêm, thiết bị mới, lệch IP, velocity); hiển thị dạng checklist trong Case detail. |
 | 11 | Tạo note xử lý | ĐẠT | `POST /api/cases/{id}/notes`, note nháp của AI lưu được vào case, timeline ghi nhận. Test `test_case_note_and_timeline`. |
@@ -51,7 +51,6 @@ repo đã có đủ cấu hình để deploy trong ~10 phút (xem mục 5).
 | 21 | Không nhận notebook / CLI / prototype localhost | ĐẠT* | Không có notebook; app là web server thật + cơ sở dữ liệu thật. *Ràng buộc “deployed” xem mục 17. |
 
 ### Về cột “Công nghệ” trong đề
-
 Đề gợi ý `PostgreSQL, Python/scikit-learn, FastAPI, Streamlit/Dash (Plotly), OpenAI/Claude, rule engine`.
 
 | Gợi ý | Thực tế | Ghi chú |
@@ -60,8 +59,19 @@ repo đã có đủ cấu hình để deploy trong ~10 phút (xem mục 5).
 | Python/scikit-learn | ✅ | 3.14, scikit-learn 1.9.1 |
 | FastAPI | ✅ | 0.165 |
 | Streamlit/Dash (Plotly) | ⚠️ thay bằng React + Recharts | Vẫn là web app đầy đủ và deploy được; Streamlit không deploy SPA/RBAC tốt bằng. **Nếu giảng viên chấm đúng stack, có thể bổ sung 1 trang Streamlit đọc từ API** — chi phí ~30 phút. |
-| OpenAI/Claude | ✅ có tích hợp | Cần `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` để bật; không có key vẫn trả giải thích offline |
+| OpenAI/Claude | ✅ có tích hợp | Qua OpenRouter (1 key, nhiều model) hoặc gọi trực tiếp OpenAI/Anthropic; cũng chạy được model local (Ollama) nhờ `AI_BASE_URL` |
 | Rule engine | ✅ | Tự viết, có UI quản trị |
+
+### Minh chứng AI thật (OpenRouter)
+
+Case `CASE-2026-0134` — giao dịch 49.000.000đ tại Agoda, điểm 94/100, 5 rule khớp. Bấm “Tạo lại bản giải thích”:
+
+![Case detail với giải thích do OpenRouter sinh](screenshots/case-ai-openrouter.png)
+
+- Chip hiển thị `OpenRouter · 8488ms`; timeline ghi `AI tạo bản giải thích (openrouter/openai/gpt-4o-mini)`.
+- Nội dung do LLM sinh bám đúng số liệu trong DB: “cao hơn 17.6 lần so với chi tiêu trung bình 2.777.868 VND”, “lúc 03:00”, “IP (ID) không khớp thẻ (VN)”, “ngành Du lịch”.
+- Kết quả được cache trong bảng `explanations`; mở lại case không gọi API lại (chỉ tốn tiền khi bấm “Tạo lại”).
+- Chi phí đo được với `openai/gpt-4o-mini`: ~$0,0004/case (≈10đ), toàn bộ 142 case demo < 1.500đ.
 
 ## 3. Yêu cầu phi chức năng
 
@@ -93,6 +103,9 @@ repo đã có đủ cấu hình để deploy trong ~10 phút (xem mục 5).
 [Build]      npm run build                     → tsc OK, 2074 modules, dist/ 1.27 kB + assets
 [UI]         Chromium 1262×568                 → login (3 vai trò), dashboard, queue, case detail,
                                                   transactions, rules, users, audit, settings
+[AI thật]    POST /api/cases/{id}/explain      → provider=openrouter, model=openai/gpt-4o-mini,
+             (OpenRouter, key trong .env)         latency_ms=8488, 5 lý do + 4 câu hỏi xác minh,
+                                                  số liệu khớp DB (49.000.000đ, 17,6× trung bình)
 [RBAC]       viewer → /rules                   → "Không đủ quyền truy cập"; API /api/users → 403
 [Human-in-loop] analyst tạo kết luận           → modal xác nhận → case status=resolved,
                                                   decision=false_positive, event "decision",
@@ -116,7 +129,7 @@ repo đã có đủ cấu hình để deploy trong ~10 phút (xem mục 5).
 | # | Vấn đề | Mức độ | Cách xử lý |
 |---|---|---|---|
 | 1 | Chưa có URL công khai | **Cao** (nếu đề bắt buộc) | Render Blueprint đã có: push repo → New Blueprint → chọn repo → Render tạo Postgres + web + `JWT_SECRET` tự động. Chi tiết ở README mục “Deploy online”. Không cần sửa code. |
-| 2 | AI đang chạy template offline | Trung bình | Thêm `OPENAI_API_KEY` (hoặc `ANTHROPIC_API_KEY`) vào biến môi trường là bật LLM thật; code đã có sẵn HTTP client + JSON schema + fallback. |
+| 2 | ~~AI đang chạy template offline~~ | Đã xử lý | Đã bật OpenRouter trong `.env` (`.env` bị gitignore). Muốn đổi model chỉ cần sửa `AI_MODEL`; muốn dùng model local đặt `AI_BASE_URL` trỏ Ollama/LM Studio. |
 | 3 | Chưa có Alembic migration | Thấp | Schema tạo bằng `create_all` — đủ cho demo; production nên thêm migration. |
 | 4 | Rate-limit login lưu in-memory | Thấp | Ổn với 1 process; scale nhiều replica thì chuyển Redis. |
 | 5 | Dữ liệu & model là tổng hợp | Trung bình | Đã ghi rõ trong model card và README; cần thẩm định lại trên dữ liệu thật nếu dùng thật. |

@@ -45,6 +45,14 @@ import { ScoreRing } from "@/components/ScoreRing";
 import { Modal } from "@/components/Modal";
 import { useToast } from "@/lib/toast";
 
+const PROVIDER_LABELS: Record<string, string> = {
+  openai: "OpenAI",
+  openrouter: "OpenRouter",
+  anthropic: "Anthropic",
+  offline: "Template offline",
+  "offline-fallback": "Offline fallback",
+};
+
 const FIELD_LABELS: Record<string, string> = {
   amount: "Số tiền",
   amount_ratio: "Tỷ lệ chi tiêu",
@@ -608,13 +616,7 @@ export function CaseDetailPage() {
                     Bản nháp AI
                   </span>
                   <span className="chip text-[9px]">
-                    {explanation.provider === "openai"
-                      ? "OpenAI"
-                      : explanation.provider === "anthropic"
-                        ? "Anthropic"
-                        : explanation.provider === "offline-fallback"
-                          ? "Offline fallback"
-                          : "Template offline"}{" "}
+                    {PROVIDER_LABELS[explanation.provider] ?? explanation.provider}{" "}
                     · {explanation.latency_ms < 1 ? "<1ms" : `${explanation.latency_ms}ms`}
                   </span>
                   <span className="ml-auto text-[9px] text-slate-600">{timeAgo(explanation.created_at)}</span>
