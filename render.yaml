@@ -22,12 +22,28 @@ services:
         value: production
       - key: COOKIE_SECURE
         value: "true"
+      # Render đứng sau reverse proxy nên IP thật nằm ở X-Forwarded-For.
+      - key: TRUST_PROXY_HEADERS
+        value: "true"
       - key: DEMO_MODE
         value: "true"
       - key: SEED_ON_START
         value: "true"
+      # OpenRouter: một key dùng được nhiều model, có router "openrouter/free".
       - key: AI_PROVIDER
-        value: auto
+        value: openrouter
+      - key: AI_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: AI_MODEL
+        value: openrouter/free
+      - key: AI_FALLBACK_MODELS
+        value: baidu/ernie-5.5-flash-preview:free,nvidia/nemotron-3-ultra-550b-a55b:free
+      # Free tier trả 429/long mạch, để rộng hơn mặc định.
+      - key: AI_TIMEOUT_SECONDS
+        value: "75"
+      # sync: false => Render sẽ hỏi giá trị lúc tạo Blueprint, không lưu vào repo.
+      - key: OPENROUTER_API_KEY
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
