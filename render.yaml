@@ -6,7 +6,9 @@ databases:
 
 services:
   - type: web
-    name: fraudlens
+    # Tên service phải unique toàn hệ thống Render vì nó thành subdomain
+    # https://<name>.onrender.com. "fraudlens" đã bị app khác chiếm.
+    name: danh-gia-giao-dich
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
