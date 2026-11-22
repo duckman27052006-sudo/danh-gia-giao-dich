@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck, Sparkles, TriangleAlert } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, KeyRound, Lock, Mail, ShieldCheck, Sparkles, TriangleAlert } from "lucide-react";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { LogoMark } from "@/components/Logo";
 import { ScoreRing } from "@/components/ScoreRing";
+import { Disclosure } from "@/components/Patterns";
 
 const DEMO_ACCOUNTS = [
   { label: "Quản trị", email: "admin@fraudlens.vn", password: "Admin@12345", tone: "text-mint-300" },
@@ -212,13 +213,14 @@ export function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-8">
-            <div className="mb-3 flex items-center gap-3">
-              <div className="h-px flex-1 bg-white/[0.07]" />
-              <p className="text-[9.5px] uppercase tracking-[0.16em] text-slate-600">Tài khoản demo</p>
-              <div className="h-px flex-1 bg-white/[0.07]" />
-            </div>
-            <div className="space-y-1.5">
+          <Disclosure
+            title="Tài khoản demo"
+            subtitle="3 vai trò · bấm để điền nhanh"
+            icon={KeyRound}
+            className="mt-7"
+            bodyClassName="p-2"
+          >
+            <div className="space-y-1">
               {DEMO_ACCOUNTS.map((account) => (
                 <button
                   key={account.email}
@@ -228,17 +230,17 @@ export function LoginPage() {
                     setPassword(account.password);
                     setError(null);
                   }}
-                  className="flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.015] px-3 py-2.5 text-left transition hover:border-mint-400/25 hover:bg-white/[0.04]"
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/60"
                 >
-                  <span className={`w-[74px] shrink-0 text-[10.5px] font-medium ${account.tone}`}>{account.label}</span>
+                  <span className={`w-[76px] shrink-0 text-[10.5px] font-medium ${account.tone}`}>{account.label}</span>
                   <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-slate-500">{account.email}</span>
-                  <ArrowRight size={12} className="text-slate-600" />
+                  <ArrowRight size={12} className="shrink-0 text-slate-600" />
                 </button>
               ))}
             </div>
-          </div>
+          </Disclosure>
 
-          <p className="mt-8 text-center text-[10px] leading-relaxed text-slate-600">
+          <p className="mx-auto mt-7 max-w-[320px] rounded-xl border border-white/70 bg-white/60 px-3 py-2 text-center text-[10px] leading-relaxed text-slate-600 backdrop-blur-sm">
             Phiên đăng nhập được bảo vệ bằng refresh token HTTP-only.
             <br />
             FraudLens v1.0 · Demo nội bộ

@@ -1,19 +1,26 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowUp, Plus, Power, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowUp, Plus, Search, Trash2, X } from "lucide-react";
 import clsx from "clsx";
 import { api } from "@/lib/api";
 import { categoryLabel, formatDateTime, formatNumber } from "@/lib/format";
 import type { Rule, RuleCondition, RuleField } from "@/lib/types";
 import { ErrorState, PageHeader, SkeletonRows } from "@/components/Ui";
+import { Disclosure, Segmented, StatStrip } from "@/components/Patterns";
 import { Modal } from "@/components/Modal";
 import { useToast } from "@/lib/toast";
 
 const SEVERITY_STYLE = {
-  high: { label: "Nghiêm trọng", cls: "text-coral-400 border-coral-400/25 bg-coral-500/10" },
-  medium: { label: "Trung bình", cls: "text-amber-400 border-amber-400/25 bg-amber-500/10" },
-  low: { label: "Thấp", cls: "text-slate-400 border-white/10 bg-white/[0.04]" },
+  high: { label: "Nghiêm trọng", text: "text-coral-400" },
+  medium: { label: "Trung bình", text: "text-amber-400" },
+  low: { label: "Thấp", text: "text-slate-500" },
 } as const;
+
+const FILTER_OPTIONS: { value: "all" | "on" | "off"; label: string }[] = [
+  { value: "all", label: "Tất cả" },
+  { value: "on", label: "Đang bật" },
+  { value: "off", label: "Đã tắt" },
+];
 
 const OP_LABELS: Record<string, string> = {
   ">": "lớn hơn",
@@ -193,67 +200,45 @@ export function RulesPage() {
         }
       />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-3">
-        <div className="panel flex items-center gap-3 px-4 py-3.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-mint-400/15 bg-mint-500/[0.07] text-mint-300">
-            <Power size={14} />
-          </span>
-          <div>
-            <p className="text-[10px] text-slate-500">Rule đang bật</p>
-            <p className="font-mono text-[16px] text-white">
-              {rules.data?.filter((rule) => rule.enabled).length ?? "—"}
-              <span className="text-[11px] text-slate-600"> / {rules.data?.length ?? "—"}</span>
-            </p>
-          </div>
-        </div>
-        <div className="panel flex items-center gap-3 px-4 py-3.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-400/15 bg-amber-500/[0.07] text-amber-400">
-            <SlidersHorizontal size={14} />
-          </span>
-          <div>
-            <p className="text-[10px] text-slate-500">Tổng trọng số rule</p>
-            <p className="font-mono text-[16px] text-white">{totalWeight} <span className="text-[11px] text-slate-600">điểm</span></p>
-          </div>
-        </div>
-        <div className="panel flex items-center gap-3 px-4 py-3.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-azure-400/15 bg-azure-500/[0.07] text-azure-400">
-            <ArrowUp size={14} />
-          </span>
-          <div>
-            <p className="text-[10px] text-slate-500">Tổng lượt khớp</p>
-            <p className="font-mono text-[16px] text-white">{formatNumber(totalHits)}</p>
-          </div>
-        </div>
-      </div>
+      <StatStrip
+        className="mb-3"
+        items={[
+          {
+            label: "Rule đang bật",
+            value: (
+              <>
+                {rules.data?.filter((rule) => rule.enabled).length ?? "—"}
+                <span className="ml-1 text-[11px] font-normal text-slate-500">/ {rules.data?.length ?? "—"}</span>
+              </>
+            ),
+            tone: "good",
+          },
+          {
+            label: "Tổng trọng số rule",
+            value: (
+              <>
+                {totalWeight}
+                <span className="ml-1 text-[11px] font-normal text-slate-500">điểm</span>
+              </>
+            ),
+            tone: "warn",
+          },
+          { label: "Tổng lượt khớp", value: formatNumber(totalHits), tone: "neutral" },
+        ]}
+      />
 
-      <div className="mb-4 flex flex-col gap-3 rounded-xl border border-white/[0.06] bg-white/[0.018] px-4 py-3 sm:flex-row sm:items-center">
-        <div className="flex items-center gap-2 text-slate-500">
-          <Search size={14} />
+      <div className="panel-flat mb-3 flex flex-col gap-2.5 px-4 py-3 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 items-center gap-2 text-slate-500">
+          <Search size={14} className="shrink-0" />
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Tìm rule…"
+            aria-label="Tìm rule"
             className="w-full bg-transparent text-[11.5px] text-slate-200 outline-none placeholder:text-slate-600 sm:w-52"
           />
         </div>
-        <div className="flex rounded-lg border border-white/10 bg-ink-950/50 p-0.5 sm:ml-auto">
-          {[
-            { value: "all", label: "Tất cả" },
-            { value: "on", label: "Đang bật" },
-            { value: "off", label: "Đã tắt" },
-          ].map((item) => (
-            <button
-              key={item.value}
-              onClick={() => setFilter(item.value as typeof filter)}
-              className={clsx(
-                "rounded-md px-2.5 py-1.5 text-[10.5px] transition",
-                filter === item.value ? "bg-white/[0.09] text-white" : "text-slate-500 hover:text-slate-300",
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        <Segmented className="sm:ml-auto" value={filter} options={FILTER_OPTIONS} onChange={setFilter} />
       </div>
 
       {rules.isError ? (
@@ -261,62 +246,80 @@ export function RulesPage() {
       ) : rules.isLoading ? (
         <div className="panel"><SkeletonRows rows={6} /></div>
       ) : (
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="space-y-2">
           {visible.map((rule) => {
             const severity = SEVERITY_STYLE[rule.severity];
             return (
-              <div key={rule.id} className="panel panel-hover flex flex-col p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-[13px] font-medium text-white">{rule.name}</p>
-                      <span className={clsx("rounded-full border px-1.5 py-0.5 text-[9px]", severity.cls)}>{severity.label}</span>
-                      <span className="chip text-[9px]">{rule.category}</span>
+              <Disclosure
+                key={rule.id}
+                title={rule.name}
+                subtitle={`Nhóm: ${rule.category}`}
+                badge={<span className={clsx("whitespace-nowrap", severity.text)}>{severity.label}</span>}
+                actions={
+                  <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="mono inline-flex items-center gap-0.5 text-[11px] font-semibold text-amber-400"
+                        title="Điểm cộng khi rule khớp"
+                      >
+                        <ArrowUp size={10} />+{rule.weight}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggle.mutate(rule)}
+                        className={clsx(
+                          "relative h-5 w-9 shrink-0 rounded-full border transition",
+                          rule.enabled ? "border-mint-400/40 bg-mint-500/25" : "border-white/10 bg-white/[0.05]",
+                        )}
+                        aria-label={rule.enabled ? "Tắt rule" : "Bật rule"}
+                      >
+                        <span
+                          className={clsx(
+                            "absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all",
+                            rule.enabled ? "left-[18px] bg-mint-400" : "left-0.5 bg-slate-500",
+                          )}
+                        />
+                      </button>
                     </div>
-                    <p className="mt-1.5 text-[10.5px] leading-relaxed text-slate-500">{rule.description}</p>
+                    <button type="button" className="btn-ghost btn-sm" onClick={() => openEdit(rule)}>
+                      Sửa
+                    </button>
                   </div>
-                  <button
-                    onClick={() => toggle.mutate(rule)}
-                    className={clsx(
-                      "relative h-5 w-9 shrink-0 rounded-full border transition",
-                      rule.enabled ? "border-mint-400/40 bg-mint-500/25" : "border-white/10 bg-white/[0.05]",
-                    )}
-                    aria-label={rule.enabled ? "Tắt rule" : "Bật rule"}
-                  >
-                    <span
-                      className={clsx(
-                        "absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all",
-                        rule.enabled ? "left-[18px] bg-mint-400" : "left-0.5 bg-slate-500",
-                      )}
-                    />
-                  </button>
-                </div>
+                }
+                bodyClassName="px-4 py-3"
+              >
+                <div className="space-y-3">
+                  {rule.description && (
+                    <p className="text-[11.5px] leading-relaxed text-slate-500">{rule.description}</p>
+                  )}
 
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {rule.conditions.map((condition, index) => (
-                    <span key={index} className="rounded-md border border-white/[0.07] bg-ink-950/40 px-2 py-1 font-mono text-[9.5px] text-slate-500">
-                      {conditionSummary(condition)}
-                    </span>
-                  ))}
-                </div>
+                  {rule.conditions.length > 0 && (
+                    <div>
+                      <p className="eyebrow mb-1.5">Điều kiện (AND)</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {rule.conditions.map((condition, index) => (
+                          <span
+                            key={index}
+                            className="rounded-md border border-white/[0.07] bg-ink-950/40 px-2 py-1 font-mono text-[9.5px] text-slate-500"
+                          >
+                            {conditionSummary(condition)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-                <div className="mt-auto flex items-center justify-between gap-2 border-t border-white/[0.06] pt-3.5">
-                  <div className="flex items-center gap-3 text-[9.5px] text-slate-600">
-                    <span className="flex items-center gap-1 font-mono text-amber-400">
-                      <ArrowUp size={10} /> +{rule.weight}
-                    </span>
-                    <span>{formatNumber(rule.hit_count)} lượt khớp</span>
-                    {rule.last_hit_at && <span className="hidden sm:inline">gần nhất {formatDateTime(rule.last_hit_at)}</span>}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-white/[0.06] pt-2.5 text-[10px] text-slate-600">
+                    <span className="font-mono text-amber-400">{formatNumber(rule.hit_count)} lượt khớp</span>
+                    {rule.last_hit_at && <span>gần nhất {formatDateTime(rule.last_hit_at)}</span>}
                   </div>
-                  <button className="btn-ghost btn-sm px-2 py-1 text-[10px]" onClick={() => openEdit(rule)}>
-                    Sửa
-                  </button>
                 </div>
-              </div>
+              </Disclosure>
             );
           })}
+
           {visible.length === 0 && (
-            <div className="panel col-span-2 py-14 text-center">
+            <div className="panel py-14 text-center">
               <AlertTriangle size={20} className="mx-auto mb-3 text-slate-600" />
               <p className="text-[12px] text-slate-400">Không có rule phù hợp bộ lọc.</p>
             </div>

@@ -7,6 +7,7 @@ import {
   Plus,
   Search,
   ShieldAlert,
+  SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -23,11 +24,20 @@ import {
 import type { Page, RuleHit, Transaction } from "@/lib/types";
 import { RiskBadge } from "@/components/Badges";
 import { EmptyState, ErrorState, PageHeader, SkeletonRows } from "@/components/Ui";
+import { Disclosure, Segmented } from "@/components/Patterns";
 import { Pagination } from "@/components/Pagination";
 import { ScoreRing } from "@/components/ScoreRing";
 import { Modal } from "@/components/Modal";
 import { SimulateDialog } from "@/components/SimulateDialog";
 import { useToast } from "@/lib/toast";
+
+const BAND_TABS = [
+  { value: "all", label: "Tất cả" },
+  { value: "low", label: "Thấp" },
+  { value: "medium", label: "Trung bình" },
+  { value: "high", label: "Cao" },
+  { value: "critical", label: "Rất cao" },
+];
 
 function IngestForm({ onDone }: { onDone: (txn: Transaction) => void }) {
   const toast = useToast();
@@ -180,6 +190,13 @@ export function TransactionsPage() {
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [created, setCreated] = useState<Transaction | null>(null);
 
+  const activeAdvancedFilters = [
+    channel !== "all",
+    flagFilter !== "all",
+    range !== "30",
+    sort !== "recent",
+  ].filter(Boolean).length;
+
   const dateFrom = useMemo(() => {
     if (range === "all") return null;
     const days = range === "today" ? 1 : Number(range);
@@ -210,67 +227,109 @@ export function TransactionsPage() {
         eyebrow="Vận hành"
         title="Giao dịch"
         subtitle="Toàn bộ giao dịch đã ingest, kèm điểm ML, điểm rule và trạng thái điều tra tương ứng."
-        actions={
-          <>
-            <button className="btn-ghost btn-sm" onClick={() => setSimulateOpen(true)} disabled={!canEdit}>
-              <Sparkles size={13} /> Mô phỏng
-            </button>
-            <button className="btn-primary btn-sm" onClick={() => setIngestOpen(true)} disabled={!canEdit}>
-              <Plus size={13} /> Nhập giao dịch
-            </button>
-          </>
-        }
       />
 
-      <div className="panel overflow-hidden">
-        <div className="flex flex-col gap-2 border-b border-white/[0.06] px-4 py-3 sm:flex-row sm:items-center sm:px-5">
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              change(() => setQ(search.trim()));
-            }}
-            className="relative w-full sm:max-w-[300px]"
-          >
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Mã giao dịch, khách hàng, merchant…"
-              className="field py-2 pl-9 text-[11.5px]"
-            />
-          </form>
-          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-            <select value={band} onChange={(event) => change(() => setBand(event.target.value))} className="field w-auto py-2 text-[11px]">
-              <option value="all">Mọi mức rủi ro</option>
-              <option value="critical">Rất cao</option>
-              <option value="high">Cao</option>
-              <option value="medium">Trung bình</option>
-              <option value="low">Thấp</option>
-            </select>
-            <select value={channel} onChange={(event) => change(() => setChannel(event.target.value))} className="field w-auto py-2 text-[11px]">
+      <Disclosure
+        title="Bộ lọc nâng cao"
+        subtitle="Kênh, cờ gắn, khoảng thời gian và cách sắp xếp"
+        badge={activeAdvancedFilters > 0 ? `${activeAdvancedFilters} đang bật` : undefined}
+        icon={SlidersHorizontal}
+        className="mb-3"
+      >
+        <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4">
+          <div>
+            <label className="label" htmlFor="txn-filter-channel">
+              Kênh
+            </label>
+            <select
+              id="txn-filter-channel"
+              value={channel}
+              onChange={(event) => change(() => setChannel(event.target.value))}
+              className="field py-2 text-[11px]"
+            >
               <option value="all">Mọi kênh</option>
               <option value="online">Online</option>
               <option value="pos">POS</option>
               <option value="transfer">Chuyển khoản</option>
               <option value="atm">ATM</option>
             </select>
-            <select value={flagFilter} onChange={(event) => change(() => setFlagFilter(event.target.value))} className="field w-auto py-2 text-[11px]">
+          </div>
+          <div>
+            <label className="label" htmlFor="txn-filter-flag">
+              Trạng thái cờ
+            </label>
+            <select
+              id="txn-filter-flag"
+              value={flagFilter}
+              onChange={(event) => change(() => setFlagFilter(event.target.value))}
+              className="field py-2 text-[11px]"
+            >
               <option value="all">Tất cả</option>
               <option value="flagged">Bị gắn cờ</option>
               <option value="clean">Không gắn cờ</option>
             </select>
-            <select value={range} onChange={(event) => change(() => setRange(event.target.value))} className="field w-auto py-2 text-[11px]">
+          </div>
+          <div>
+            <label className="label" htmlFor="txn-filter-range">
+              Thời gian
+            </label>
+            <select
+              id="txn-filter-range"
+              value={range}
+              onChange={(event) => change(() => setRange(event.target.value))}
+              className="field py-2 text-[11px]"
+            >
               <option value="today">Hôm nay</option>
               <option value="7">7 ngày</option>
               <option value="30">30 ngày</option>
               <option value="90">90 ngày</option>
               <option value="all">Toàn bộ</option>
             </select>
-            <select value={sort} onChange={(event) => change(() => setSort(event.target.value))} className="field w-auto py-2 text-[11px]">
+          </div>
+          <div>
+            <label className="label" htmlFor="txn-filter-sort">
+              Sắp xếp
+            </label>
+            <select
+              id="txn-filter-sort"
+              value={sort}
+              onChange={(event) => change(() => setSort(event.target.value))}
+              className="field py-2 text-[11px]"
+            >
               <option value="recent">Mới nhất</option>
               <option value="score">Rủi ro cao</option>
               <option value="amount">Giá trị lớn</option>
             </select>
+          </div>
+        </div>
+      </Disclosure>
+
+      <div className="panel overflow-hidden">
+        <div className="flex flex-col gap-2.5 border-b border-white/[0.06] px-4 py-3 lg:flex-row lg:items-center lg:gap-3 lg:px-5">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              change(() => setQ(search.trim()));
+            }}
+            className="relative w-full lg:max-w-[280px]"
+          >
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              aria-label="Tìm giao dịch"
+              placeholder="Mã giao dịch, khách hàng, merchant…"
+              className="field py-2 pl-9 text-[11.5px]"
+            />
+          </form>
+          <Segmented value={band} options={BAND_TABS} onChange={(value) => change(() => setBand(value))} />
+          <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
+            <button className="btn-ghost btn-sm" onClick={() => setSimulateOpen(true)} disabled={!canEdit}>
+              <Sparkles size={13} /> Mô phỏng
+            </button>
+            <button className="btn-primary btn-sm" onClick={() => setIngestOpen(true)} disabled={!canEdit}>
+              <Plus size={13} /> Nhập giao dịch
+            </button>
           </div>
         </div>
 
@@ -286,42 +345,45 @@ export function TransactionsPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1020px] border-collapse">
+            <table className="w-full min-w-[880px] border-collapse">
               <thead>
                 <tr className="bg-white/[0.012]">
-                  <th className="th">Mã giao dịch</th>
-                  <th className="th">Khách hàng</th>
-                  <th className="th">Merchant</th>
-                  <th className="th">Giá trị</th>
-                  <th className="th">ML / Rule</th>
-                  <th className="th">Điểm rủi ro</th>
-                  <th className="th">Kênh</th>
                   <th className="th">Thời điểm</th>
-                  <th className="th">Case</th>
+                  <th className="th">Khách hàng / Merchant</th>
+                  <th className="th">Giá trị</th>
+                  <th className="th">Điểm rủi ro</th>
+                  <th className="th">Cờ / Trạng thái</th>
                 </tr>
               </thead>
               <tbody>
                 {transactions.data.items.map((txn) => (
                   <tr key={txn.id} className="table-row cursor-pointer" onClick={() => setSelected(txn)}>
                     <td className="td">
-                      <p className="max-w-[150px] truncate font-mono text-[10.5px] text-slate-400" title={txn.external_id}>
-                        {txn.external_id}
+                      <div className="flex items-center gap-1.5">
+                        <p className="whitespace-nowrap text-[11px] text-slate-200">{formatDateTime(txn.occurred_at)}</p>
+                        {txn.is_simulated && (
+                          <span className="shrink-0 rounded border border-azure-400/25 bg-azure-500/10 px-1 py-0.5 text-[8.5px] text-azure-400">
+                            mô phỏng
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 max-w-[190px] truncate font-mono text-[9.5px] text-slate-500" title={txn.external_id}>
+                        {channelLabel(txn.channel)} · {txn.external_id}
                       </p>
-                      {txn.is_simulated && <p className="mt-0.5 text-[9px] text-azure-400/70">mô phỏng</p>}
                     </td>
                     <td className="td">
-                      <p className="text-[11.5px] text-slate-200">{txn.customer_name}</p>
-                      <p className="mt-0.5 font-mono text-[9px] text-slate-600">{txn.customer_id}</p>
+                      <p className="max-w-[170px] truncate text-[11.5px] font-medium text-slate-200" title={txn.customer_id}>
+                        {txn.customer_name}
+                      </p>
+                      <p
+                        className="mt-0.5 max-w-[210px] truncate text-[9.5px] text-slate-500"
+                        title={`${txn.merchant_name} · ${categoryLabel(txn.merchant_category)}`}
+                      >
+                        {txn.merchant_name} · {categoryLabel(txn.merchant_category)}
+                      </p>
                     </td>
-                    <td className="td">
-                      <p className="max-w-[180px] truncate text-[11.5px] text-slate-300">{txn.merchant_name}</p>
-                      <p className="mt-0.5 text-[9.5px] text-slate-600">{categoryLabel(txn.merchant_category)}</p>
-                    </td>
-                    <td className="td whitespace-nowrap font-mono text-[11.5px] text-slate-100">{compactVND(txn.amount)}</td>
-                    <td className="td">
-                      <span className="font-mono text-[10.5px] text-azure-400">{txn.ml_score.toFixed(0)}</span>
-                      <span className="mx-1 text-slate-700">/</span>
-                      <span className="font-mono text-[10.5px] text-amber-400">{txn.rule_score.toFixed(0)}</span>
+                    <td className="td" title={formatVND(txn.amount)}>
+                      <p className="whitespace-nowrap font-mono text-[11.5px] text-slate-100">{compactVND(txn.amount)}</p>
                     </td>
                     <td className="td">
                       <div className="flex items-center gap-2">
@@ -329,20 +391,31 @@ export function TransactionsPage() {
                         <RiskBadge band={txn.risk_band} />
                       </div>
                     </td>
-                    <td className="td text-[10.5px] text-slate-400">{channelLabel(txn.channel)}</td>
-                    <td className="td whitespace-nowrap text-[10.5px] text-slate-500">{formatDateTime(txn.occurred_at)}</td>
                     <td className="td">
-                      {txn.case ? (
-                        <Link
-                          to={`/cases/${txn.case.id}`}
-                          onClick={(event) => event.stopPropagation()}
-                          className="inline-flex items-center gap-1 whitespace-nowrap font-mono text-[10px] text-mint-300 hover:text-mint-200"
-                        >
-                          {txn.case.code} <ArrowUpRight size={10} />
-                        </Link>
-                      ) : (
-                        <span className="text-[10px] text-slate-600">—</span>
-                      )}
+                      <span
+                        className={clsx(
+                          "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                          txn.is_flagged
+                            ? "border-coral-400/30 bg-coral-500/10 text-coral-400"
+                            : "border-mint-400/25 bg-mint-500/10 text-mint-300",
+                        )}
+                      >
+                        {txn.is_flagged ? <ShieldAlert size={10} /> : <CheckCircle2 size={10} />}
+                        {txn.is_flagged ? "Gắn cờ" : "Không cờ"}
+                      </span>
+                      <p className="mt-1">
+                        {txn.case ? (
+                          <Link
+                            to={`/cases/${txn.case.id}`}
+                            onClick={(event) => event.stopPropagation()}
+                            className="inline-flex items-center gap-1 whitespace-nowrap font-mono text-[10px] text-mint-300 hover:text-mint-200"
+                          >
+                            {txn.case.code} <ArrowUpRight size={10} />
+                          </Link>
+                        ) : (
+                          <span className="text-[10px] text-slate-600">Chưa có case</span>
+                        )}
+                      </p>
                     </td>
                   </tr>
                 ))}
