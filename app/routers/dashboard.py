@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.deps import require_roles
+from app.explain import resolve_ai_provider
 from app.ml.service import metadata
 from app.models import Case, Rule, Transaction, User, utcnow
 from app.schemas import (
@@ -21,6 +22,21 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+AI_PROVIDER_LABELS = {
+    "openrouter": "OpenRouter",
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+}
+
+
+def _ai_provider_label() -> str:
+    """Nhãn nhà cung cấp AI đang dùng, tính theo đúng thứ tự ưu tiên của
+    ``resolve_ai_provider`` (OpenRouter → OpenAI → Anthropic) và công tắc chung."""
+    provider = resolve_ai_provider()
+    if provider is None or not settings.ai_enabled:
+        return "Offline template"
+    return AI_PROVIDER_LABELS.get(provider.name, provider.name)
 
 BAND_LABELS = {"critical": "Rất cao", "high": "Cao", "medium": "Trung bình", "low": "Thấp"}
 
@@ -215,7 +231,7 @@ def dashboard(
     ]
 
     model_meta = metadata()
-    ai_provider = "OpenAI" if settings.openai_api_key else ("Anthropic" if settings.anthropic_api_key else "Offline template")
+    ai_provider = _ai_provider_label()
 
     summary = DashboardSummary(
         total_transactions=total_transactions,
