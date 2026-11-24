@@ -20,7 +20,9 @@ services:
     environment:
       DATABASE_URL: postgresql://fraudlens:fraudlens_dev_password@db:5432/fraudlens
       JWT_SECRET: local-compose-secret-change-before-deploy
-      ENVIRONMENT: production
+      # Compose là môi trường local/demo: để development, vì chế độ production
+      # từ chối khởi động khi COOKIE_SECURE=false hoặc DEMO_MODE=true (fail-fast).
+      ENVIRONMENT: development
       DEMO_MODE: "true"
       SEED_ON_START: "true"
       COOKIE_SECURE: "false"

@@ -10,6 +10,7 @@ from app.db import get_db
 from app.deps import require_roles
 from app.models import AuditLog, User
 from app.schemas import AuditPage
+from app.timeutils import to_naive_utc
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -41,9 +42,9 @@ def list_audit(
     if entity_type and entity_type != "all":
         conditions.append(AuditLog.entity_type == entity_type)
     if date_from:
-        conditions.append(AuditLog.created_at >= date_from.replace(tzinfo=None))
+        conditions.append(AuditLog.created_at >= to_naive_utc(date_from))
     if date_to:
-        conditions.append(AuditLog.created_at <= date_to.replace(tzinfo=None))
+        conditions.append(AuditLog.created_at <= to_naive_utc(date_to))
 
     total = db.scalar(select(func.count()).select_from(AuditLog).where(*conditions)) or 0
     items = db.scalars(

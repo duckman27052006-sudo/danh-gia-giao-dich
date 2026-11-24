@@ -255,12 +255,14 @@ class RuleCreate(RuleBase):
 
 
 class RuleUpdate(BaseModel):
-    name: str | None = None
+    name: str | None = Field(default=None, min_length=3, max_length=120)
     description: str | None = None
-    conditions: list[RuleCondition] | None = None
+    # min_length=1 để PATCH {"conditions": []} trả 422 thay vì đâm CHECK constraint
+    # ck_rules_conditions_array ở tầng DB (lỗi 500 và mất audit của thao tác).
+    conditions: list[RuleCondition] | None = Field(default=None, min_length=1)
     weight: int | None = Field(default=None, ge=1, le=100)
     severity: str | None = Field(default=None, pattern="^(low|medium|high)$")
-    category: str | None = None
+    category: str | None = Field(default=None, max_length=30)
     enabled: bool | None = None
 
 
@@ -361,6 +363,8 @@ class SettingsOut(ORMModel):
     high_threshold: float
     ml_weight: float
     rule_weight: float
+    ml_flag_probability: float
+    rule_flag_threshold: float
     ai_enabled: bool
     updated_at: UTCDateTime
 
@@ -370,6 +374,10 @@ class SettingsUpdate(BaseModel):
     high_threshold: float = Field(ge=20, le=100)
     ml_weight: float = Field(ge=0, le=1)
     rule_weight: float = Field(ge=0, le=1)
+    # Ngưỡng thành phần: xác suất ML tối thiểu để model tự gắn cờ, và tổng điểm
+    # rule tối thiểu để rule engine tự gắn cờ khi model cho điểm thấp.
+    ml_flag_probability: float = Field(default=0.65, ge=0.05, le=1)
+    rule_flag_threshold: float = Field(default=80, ge=20, le=100)
     ai_enabled: bool
 
 

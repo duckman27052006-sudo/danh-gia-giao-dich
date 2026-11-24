@@ -192,7 +192,7 @@ export function RulesPage() {
       <PageHeader
         eyebrow="Quản trị"
         title="Rule engine"
-        subtitle="Các luật quyết định được cộng điểm độc lập với model ML. Tổng điểm rule được giới hạn ở 100, sau đó blend theo trọng số trong Cài đặt."
+        subtitle="Các luật quyết định được cộng điểm độc lập với model ML. Tổng điểm rule giới hạn ở 100; vượt ngưỡng rule trong Cài đặt thì tự gắn cờ, ngược lại blend theo trọng số."
         actions={
           <button className="btn-primary btn-sm" onClick={openCreate} disabled={!fields.data}>
             <Plus size={13} /> Tạo rule
@@ -329,7 +329,8 @@ export function RulesPage() {
 
       <p className="mt-4 text-[10px] leading-relaxed text-slate-600">
         Rule được đánh giá độc lập với ML. Tổng trọng số rule được giới hạn ở 100 điểm trước khi blend với model theo
-        trọng số cấu hình. Thay đổi rule được lưu trong audit trail — không áp dụng hồi tố cho case đã tạo.
+        trọng số cấu hình; nếu tổng này vượt ngưỡng rule trong Cài đặt thì rule tự gắn cờ. Thay đổi rule được lưu trong
+        audit trail — không áp dụng hồi tố cho case đã tạo.
       </p>
 
       <Modal

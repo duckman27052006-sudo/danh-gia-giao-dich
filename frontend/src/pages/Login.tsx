@@ -16,8 +16,10 @@ const DEMO_ACCOUNTS = [
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("admin@fraudlens.vn");
-  const [password, setPassword] = useState("Admin@12345");
+  // Không prefill tài khoản/mật khẩu: trước đây bundle production chứa sẵn
+  // thông tin đăng nhập admin, ai mở trang cũng thấy.
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -213,32 +215,37 @@ export function LoginPage() {
             </button>
           </form>
 
-          <Disclosure
-            title="Tài khoản demo"
-            subtitle="3 vai trò · bấm để điền nhanh"
-            icon={KeyRound}
-            className="mt-7"
-            bodyClassName="p-2"
-          >
-            <div className="space-y-1">
-              {DEMO_ACCOUNTS.map((account) => (
-                <button
-                  key={account.email}
-                  type="button"
-                  onClick={() => {
-                    setEmail(account.email);
-                    setPassword(account.password);
-                    setError(null);
-                  }}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/60"
-                >
-                  <span className={`w-[76px] shrink-0 text-[10.5px] font-medium ${account.tone}`}>{account.label}</span>
-                  <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-slate-500">{account.email}</span>
-                  <ArrowRight size={12} className="shrink-0 text-slate-600" />
-                </button>
-              ))}
-            </div>
-          </Disclosure>
+          {/* Danh sách tài khoản demo chỉ tồn tại ở bản dev: Vite loại bỏ nhánh
+              `import.meta.env.DEV` khi build production nên mật khẩu demo
+              không nằm trong bundle phát hành. */}
+          {import.meta.env.DEV && (
+            <Disclosure
+              title="Tài khoản demo"
+              subtitle="3 vai trò · bấm để điền nhanh"
+              icon={KeyRound}
+              className="mt-7"
+              bodyClassName="p-2"
+            >
+              <div className="space-y-1">
+                {DEMO_ACCOUNTS.map((account) => (
+                  <button
+                    key={account.email}
+                    type="button"
+                    onClick={() => {
+                      setEmail(account.email);
+                      setPassword(account.password);
+                      setError(null);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/60"
+                  >
+                    <span className={`w-[76px] shrink-0 text-[10.5px] font-medium ${account.tone}`}>{account.label}</span>
+                    <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-slate-500">{account.email}</span>
+                    <ArrowRight size={12} className="shrink-0 text-slate-600" />
+                  </button>
+                ))}
+              </div>
+            </Disclosure>
+          )}
 
           <p className="mx-auto mt-7 max-w-[320px] rounded-xl border border-white/70 bg-white/60 px-3 py-2 text-center text-[10px] leading-relaxed text-slate-600 backdrop-blur-sm">
             Phiên đăng nhập được bảo vệ bằng refresh token HTTP-only.

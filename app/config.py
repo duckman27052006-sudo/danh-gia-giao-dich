@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     seed_on_start: bool = True
     demo_mode: bool = True
+    # Cho phép chạy DEMO_MODE=true trên production (tài khoản demo có mật khẩu
+    # công khai). Mặc định TẮT để app từ chối khởi động thay vì âm thầm mở
+    # quyền admin cho bất kỳ ai biết URL. Render Blueprint bật rõ ràng biến này.
+    allow_demo_in_production: bool = False
     cookie_secure: bool = False
 
     ai_enabled: bool = True

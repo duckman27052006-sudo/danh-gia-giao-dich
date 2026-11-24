@@ -192,6 +192,10 @@ export interface Settings {
   high_threshold: number;
   ml_weight: number;
   rule_weight: number;
+  /** Xác suất ML tối thiểu để model tự gắn cờ (0–1). */
+  ml_flag_probability: number;
+  /** Tổng điểm rule tối thiểu để rule engine tự gắn cờ (0–100). */
+  rule_flag_threshold: number;
   ai_enabled: boolean;
   updated_at: string;
 }

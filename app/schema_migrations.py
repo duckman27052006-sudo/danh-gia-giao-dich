@@ -132,6 +132,12 @@ CHECK_CONSTRAINTS: tuple[tuple[str, str, str], ...] = (
         "AND rule_weight >= 0 AND rule_weight <= 1 "
         "AND (ml_weight + rule_weight) > 0",
     ),
+    (
+        "settings",
+        "ck_settings_flag_gates",
+        "ml_flag_probability >= 0 AND ml_flag_probability <= 1 "
+        "AND rule_flag_threshold >= 0 AND rule_flag_threshold <= 100",
+    ),
 )
 
 # (table, column, referenced table, ON DELETE action, constraint name)
@@ -300,6 +306,22 @@ def _ensure_merchant_column(conn) -> None:  # type: ignore[no-untyped-def]
     )
 
 
+def _ensure_settings_columns(conn) -> None:  # type: ignore[no-untyped-def]
+    """Thêm cột ngưỡng thành phần cho database tạo từ phiên bản trước."""
+    conn.execute(
+        text(
+            "ALTER TABLE settings ADD COLUMN IF NOT EXISTS "
+            "ml_flag_probability double precision NOT NULL DEFAULT 0.65"
+        )
+    )
+    conn.execute(
+        text(
+            "ALTER TABLE settings ADD COLUMN IF NOT EXISTS "
+            "rule_flag_threshold double precision NOT NULL DEFAULT 80.0"
+        )
+    )
+
+
 def _ensure_foreign_keys(conn) -> None:  # type: ignore[no-untyped-def]
     for table, column, ref_table, on_delete, name in FK_SPECS:
         existing = conn.execute(
@@ -414,6 +436,7 @@ def apply_schema_migrations(engine: Engine) -> None:
     with engine.begin() as conn:
         _upgrade_json_columns(conn)
         _ensure_merchant_column(conn)
+        _ensure_settings_columns(conn)
         _ensure_foreign_keys(conn)
         _ensure_check_constraints(conn)
         _rebuild_indexes(conn)

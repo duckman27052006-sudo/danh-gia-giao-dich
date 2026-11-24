@@ -38,6 +38,19 @@ def update_settings(
         )
     if abs((payload.ml_weight + payload.rule_weight) - 1.0) > 0.001:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Tổng trọng số ML + rule phải bằng 1")
+    # Cổng thành phần phải nằm trên ngưỡng cảnh báo, nếu không điểm cuối (vốn
+    # không thấp hơn tín hiệu đã kích hoạt cổng) sẽ mâu thuẫn với trạng thái gắn cờ.
+    if payload.ml_flag_probability * 100 < payload.review_threshold:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Ngưỡng xác suất ML phải tương đương >= ngưỡng cảnh báo "
+            f"(hiện {payload.ml_flag_probability:.2f} → {payload.ml_flag_probability * 100:.0f} điểm)",
+        )
+    if payload.rule_flag_threshold < payload.review_threshold:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Ngưỡng điểm rule phải >= ngưỡng cảnh báo",
+        )
 
     row = get_settings_row(db)
     before = {
@@ -45,12 +58,16 @@ def update_settings(
         "high_threshold": row.high_threshold,
         "ml_weight": row.ml_weight,
         "rule_weight": row.rule_weight,
+        "ml_flag_probability": row.ml_flag_probability,
+        "rule_flag_threshold": row.rule_flag_threshold,
         "ai_enabled": row.ai_enabled,
     }
     row.review_threshold = payload.review_threshold
     row.high_threshold = payload.high_threshold
     row.ml_weight = payload.ml_weight
     row.rule_weight = payload.rule_weight
+    row.ml_flag_probability = payload.ml_flag_probability
+    row.rule_flag_threshold = payload.rule_flag_threshold
     row.ai_enabled = payload.ai_enabled
     log_action(
         db,

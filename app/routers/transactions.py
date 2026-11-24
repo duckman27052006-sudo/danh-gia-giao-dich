@@ -14,6 +14,7 @@ from app.models import Transaction, User
 from app.schemas import SimulateRequest, TransactionIn, TransactionOut, TransactionPage
 from app.scoring import ingest_transaction
 from app.simulator import simulate_transactions
+from app.timeutils import to_naive_utc
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -56,9 +57,9 @@ def list_transactions(
     if min_score is not None:
         conditions.append(Transaction.risk_score >= min_score)
     if date_from is not None:
-        conditions.append(Transaction.occurred_at >= date_from.replace(tzinfo=None))
+        conditions.append(Transaction.occurred_at >= to_naive_utc(date_from))
     if date_to is not None:
-        conditions.append(Transaction.occurred_at <= date_to.replace(tzinfo=None))
+        conditions.append(Transaction.occurred_at <= to_naive_utc(date_to))
 
     total = db.scalar(select(func.count()).select_from(Transaction).where(*conditions)) or 0
     order = {

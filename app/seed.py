@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.explain import generate_explanation
 from app.features import CATEGORY_LABELS
 from app.merchants import get_or_create_merchant, risk_tier_for
-from app.ml.service import contributions, predict_probability
+from app.ml.service import contributions, metadata, predict_probability
 from app.ml.synthetic import generate_dataset
 from app.models import (
     AuditLog,
@@ -24,7 +24,7 @@ from app.models import (
     utcnow,
 )
 from app.rules import evaluate_rules
-from app.scoring import priority_for
+from app.scoring import combine_scores, priority_for
 from app.security import hash_password
 
 DEMO_USERS = [
@@ -180,16 +180,8 @@ def _score_record(record: dict, rules: list[Rule], setting: Setting) -> dict:
     probability = predict_probability(ctx)
     ml_score = round(probability * 100, 1)
     rule_score, hits = evaluate_rules(rules, ctx)
-    risk_score = round(ml_score * setting.ml_weight + rule_score * setting.rule_weight, 1)
-    risk_score = max(0.0, min(risk_score, 100.0))
-    if risk_score >= setting.high_threshold:
-        band = "critical"
-    elif risk_score >= setting.review_threshold:
-        band = "high"
-    elif risk_score >= setting.review_threshold * 0.65:
-        band = "medium"
-    else:
-        band = "low"
+    # Dùng chung công thức với runtime để dữ liệu demo và giao dịch mới không lệch nhau.
+    risk_score, band, is_flagged, _ = combine_scores(probability, rule_score, setting)
     for rule in rules:
         if any(hit["rule_id"] == rule.id for hit in hits):
             rule.hit_count += 1
@@ -200,7 +192,7 @@ def _score_record(record: dict, rules: list[Rule], setting: Setting) -> dict:
         "risk_band": band,
         "rule_hits": hits,
         "contributions": contributions(ctx, risk_score),
-        "is_flagged": risk_score >= setting.review_threshold,
+        "is_flagged": is_flagged,
     }
 
 
@@ -270,7 +262,7 @@ def seed_transactions(
             amount_ratio=float(record["amount_ratio"]),
             distinct_merchants_24d=int(record["distinct_merchants_24d"]),
             account_age_days=int(record["account_age_days"]),
-            model_version="gbdt-1.0.0",
+            model_version=str(metadata()["version"]),
             is_simulated=False,
             **scored,
         )

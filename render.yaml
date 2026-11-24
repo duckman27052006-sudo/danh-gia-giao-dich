@@ -29,6 +29,12 @@ services:
         value: "true"
       - key: DEMO_MODE
         value: "true"
+      # Đây là bản DEMO công khai: tài khoản demo có mật khẩu công khai trong
+      # README. Phải khai báo rõ ràng, nếu không app sẽ từ chối khởi động ở
+      # production (xem _validate_production_config trong app/main.py).
+      # Khi dùng với dữ liệu thật: đặt DEMO_MODE=false và bỏ biến dưới đây.
+      - key: ALLOW_DEMO_IN_PRODUCTION
+        value: "true"
       - key: SEED_ON_START
         value: "true"
       # OpenRouter: một key dùng được nhiều model, có router "openrouter/free".

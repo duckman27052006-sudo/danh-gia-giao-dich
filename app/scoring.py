@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import Integer, func, select, text
@@ -9,18 +9,15 @@ from sqlalchemy.orm import Session
 
 from app.features import build_context
 from app.merchants import get_or_create_merchant
-from app.ml.service import contributions, predict_probability
+from app.ml.service import contributions, metadata, predict_probability
 from app.models import Case, CaseEvent, Setting, Transaction, utcnow
 from app.rules import evaluate_rules, load_enabled_rules
 from app.schemas import TransactionIn
+from app.timeutils import to_naive_utc
 
 SLA_HOURS = {"P1": 4, "P2": 12, "P3": 48}
 
-
-def to_naive_utc(value: datetime) -> datetime:
-    if value.tzinfo is not None:
-        return value.astimezone(timezone.utc).replace(tzinfo=None)
-    return value
+__all__ = ["SLA_HOURS", "ingest_transaction", "to_naive_utc"]
 
 
 def get_settings_row(db: Session) -> Setting:
@@ -88,21 +85,36 @@ def build_runtime_context(db: Session, payload: TransactionIn, occurred_at: date
     return ctx
 
 
-def score_context(
-    db: Session, ctx: dict[str, Any], settings_row: Setting
-) -> tuple[float, list[dict[str, Any]], float, float, list[dict[str, Any]], str, bool]:
-    probability = predict_probability(ctx)
-    ml_score = round(probability * 100, 1)
-    rules = load_enabled_rules(db)
-    rule_score, hits = evaluate_rules(rules, ctx)
+def combine_scores(
+    probability: float, rule_score: float, settings_row: Setting
+) -> tuple[float, str, bool, list[str]]:
+    """Gộp xác suất ML và điểm rule thành điểm cuối + band + trạng thái gắn cờ.
 
+    Đây là **nguồn duy nhất** cho công thức chấm điểm, dùng chung cho runtime
+    (``score_context``) và cho seed dữ liệu demo (``app/seed.py``) — trước đây
+    seed tự cài lại công thức nên hai đường chấm điểm có thể lệch nhau.
+
+    Trước đây điểm cuối chỉ là blend tuyến tính ``ml×w_ml + rule×w_rule``. Với
+    trọng số mặc định 0.55/0.45 và ngưỡng cảnh báo 55, **không tín hiệu nào một
+    mình có thể gây gắn cờ**: ML tối đa 55 điểm, rule tối đa 45. Hệ quả đo được
+    trên tập test: recall chỉ 0.473 dù model đạt precision 0.987 — rất nhiều
+    giao dịch rủi ro cao nhưng không có rule hit bị bỏ qua.
+
+    Cách sửa: giữ blend làm điểm nền, nhưng cho mỗi tín hiệu một "cổng" riêng.
+    Khi một tín hiệu vượt cổng của chính nó, điểm cuối không được thấp hơn tín
+    hiệu đó — nhờ vậy blend không pha loãng tín hiệu mạnh, còn thứ tự ưu tiên
+    và risk band vẫn nhất quán với một ngưỡng cảnh báo duy nhất.
+    """
+    ml_score = round(probability * 100, 1)
     ml_weight = max(settings_row.ml_weight, 0.0)
     rule_weight = max(settings_row.rule_weight, 0.0)
     total_weight = ml_weight + rule_weight or 1.0
-    risk_score = round(
-        (ml_score * (ml_weight / total_weight)) + (rule_score * (rule_weight / total_weight)), 1
-    )
-    risk_score = max(0.0, min(risk_score, 100.0))
+    blended = (ml_score * (ml_weight / total_weight)) + (rule_score * (rule_weight / total_weight))
+
+    ml_gate_hit = probability >= settings_row.ml_flag_probability
+    rule_gate_hit = rule_score >= settings_row.rule_flag_threshold
+    risk_score = max(blended, ml_score if ml_gate_hit else 0.0, rule_score if rule_gate_hit else 0.0)
+    risk_score = round(max(0.0, min(risk_score, 100.0)), 1)
 
     if risk_score >= settings_row.high_threshold:
         band = "critical"
@@ -113,26 +125,51 @@ def score_context(
     else:
         band = "low"
 
+    reasons = ["blend"]
+    if ml_gate_hit:
+        reasons.append("ml")
+    if rule_gate_hit:
+        reasons.append("rule")
+
+    return risk_score, band, risk_score >= settings_row.review_threshold, reasons
+
+
+def score_context(
+    db: Session, ctx: dict[str, Any], settings_row: Setting
+) -> tuple[float, list[dict[str, Any]], float, float, list[dict[str, Any]], str, bool, list[str]]:
+    """Chấm điểm một context ở đường ingest runtime (xem ``combine_scores``)."""
+
+    probability = predict_probability(ctx)
+    ml_score = round(probability * 100, 1)
+    rules = load_enabled_rules(db)
+    rule_score, hits = evaluate_rules(rules, ctx)
+
+    risk_score, band, is_flagged, reasons = combine_scores(probability, rule_score, settings_row)
     signals = contributions(ctx, risk_score)
-    is_flagged = risk_score >= settings_row.review_threshold
 
     for rule in rules:
         if any(hit["rule_id"] == rule.id for hit in hits):
             rule.hit_count += 1
             rule.last_hit_at = utcnow()
 
-    return ml_score, hits, rule_score, risk_score, signals, band, is_flagged
+    return ml_score, hits, rule_score, risk_score, signals, band, is_flagged, reasons
 
 
 def priority_for(risk_score: float, amount: float, settings_row: Setting) -> str:
-    if risk_score >= 85 or amount >= 40_000_000:
+    """Ưu tiên suy ra từ chính ngưỡng cấu hình, không dùng số hard-code."""
+    if risk_score >= settings_row.high_threshold or amount >= 40_000_000:
         return "P1"
-    if risk_score >= 68 or amount >= 10_000_000:
+    if risk_score >= settings_row.review_threshold or amount >= 10_000_000:
         return "P2"
     return "P3"
 
 
-def create_case_for(db: Session, txn: Transaction, settings_row: Setting) -> Case:
+def create_case_for(
+    db: Session,
+    txn: Transaction,
+    settings_row: Setting,
+    reasons: list[str] | None = None,
+) -> Case:
     priority = priority_for(txn.risk_score, float(txn.amount), settings_row)
     now = utcnow()
     case = Case(
@@ -147,19 +184,27 @@ def create_case_for(db: Session, txn: Transaction, settings_row: Setting) -> Cas
     )
     db.add(case)
     db.flush()
+    reasons = reasons or []
+    trigger = {
+        "ml": "mô hình ML vượt ngưỡng riêng",
+        "rule": "rule engine vượt ngưỡng riêng",
+    }
+    extra = [trigger[key] for key in ("ml", "rule") if key in reasons]
+    suffix = f" — gắn cờ bởi {', '.join(extra)}" if extra else ""
     db.add(
         CaseEvent(
             case_id=case.id,
             type="created",
             message=(
                 f"Hệ thống gắn cờ giao dịch với điểm rủi ro {txn.risk_score:.0f}/100 "
-                f"({len(txn.rule_hits)} rule khớp). Chờ analyst xác minh."
+                f"({len(txn.rule_hits)} rule khớp){suffix}. Chờ analyst xác minh."
             ),
             meta={
                 "risk_score": txn.risk_score,
                 "ml_score": txn.ml_score,
                 "rule_score": txn.rule_score,
                 "priority": priority,
+                "flag_reasons": reasons,
             },
         )
     )
@@ -183,7 +228,7 @@ def ingest_transaction(
     )
 
     ctx = build_runtime_context(db, payload, occurred_at)
-    ml_score, hits, rule_score, risk_score, signals, band, is_flagged = score_context(
+    ml_score, hits, rule_score, risk_score, signals, band, is_flagged, reasons = score_context(
         db, ctx, settings_row
     )
 
@@ -219,14 +264,14 @@ def ingest_transaction(
         is_flagged=is_flagged,
         rule_hits=hits,
         contributions=signals,
-        model_version="gbdt-1.0.0",
+        model_version=str(metadata()["version"]),
         is_simulated=simulated,
     )
     db.add(txn)
     db.flush()
 
     if is_flagged:
-        create_case_for(db, txn, settings_row)
+        create_case_for(db, txn, settings_row, reasons)
 
     if commit:
         db.commit()

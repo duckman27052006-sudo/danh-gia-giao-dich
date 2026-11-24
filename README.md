@@ -243,16 +243,31 @@ Prompt được giới hạn nghiêm ngặt: chỉ dùng dữ liệu giao dịch
 - **13 feature**: log amount, giờ (sin/cos), đêm, lệch quốc gia, thiết bị mới, velocity 1h/24h, tỷ lệ chi tiêu, số merchant/24h, tuổi tài khoản, rủi ro ngành hàng, kênh online.
 - **Model**: `HistGradientBoostingClassifier`, artifact đóng gói sẵn trong `app/ml/artifacts/`.
 - **Ngưỡng mặc định**: cảnh báo ≥ 55, rủi ro rất cao ≥ 78; trọng số ML 55% / rule 45% — chỉnh được trong **Cài đặt** (admin).
+- **Hai ngưỡng thành phần** (mặc định ML p ≥ 0.65, rule ≥ 80 điểm): một tín hiệu vượt ngưỡng của chính nó
+  thì được gắn cờ mà không bị blend pha loãng. Không có cơ chế này, blend thuần 55/45 khiến **không tín
+  hiệu nào một mình đủ gắn cờ** (ML tối đa 55, rule tối đa 45 so với ngưỡng 55) và recall của hệ thống chỉ
+  còn 0.473.
 - **Rule seed**: 8 rule (giá trị lớn, đêm, lệch địa lý, velocity, thiết bị mới, thử thẻ, ngành rủi ro, vượt thói quen). Rule hit được cộng điểm, cap 100.
-- **Điểm cuối** = `ml_score × ml_weight + rule_score × rule_weight`, làm tròn 1 chữ số.
+- **Điểm cuối** = `max(ml_score × ml_weight + rule_score × rule_weight, điểm của tín hiệu đã vượt ngưỡng riêng)`,
+  làm tròn 1 chữ số; gắn cờ khi điểm ≥ ngưỡng cảnh báo. Nhờ vậy điểm, risk band và ưu tiên P1/P2/P3 luôn nhất
+  quán với nhau và chỉ có **một** ngưỡng quyết định.
 
-Model card đầy đủ: [`docs/model-card.md`](docs/model-card.md). Chỉ số hiện tại trên tập test tổng hợp: **AUC 0.9769**, precision 91.7%, recall 72.4%. Đây là benchmark trên dữ liệu mô phỏng, **không phải** cam kết hiệu năng trên dữ liệu ngân hàng thật.
+Model card đầy đủ: [`docs/model-card.md`](docs/model-card.md). Chỉ số trên tập test tổng hợp: **ROC-AUC 0.9770,
+PR-AUC 0.8965, KS 0.8525, Brier 0.0201**. Ở mức model thuần, precision/recall @ p≥0.5 là 0.918 / 0.728. Sau khi
+thêm hai ngưỡng, đo trên tập test: precision 0.919, recall **0.675** (trước khi sửa là 0.987 / 0.473). Đây là
+benchmark trên dữ liệu mô phỏng, **không phải** cam kết hiệu năng trên dữ liệu ngân hàng thật.
 
-Huấn luyện lại:
+Huấn luyện lại và đánh giá lại:
 
 ```powershell
 .\.venv\Scripts\python -m app.ml.train --days 60 --customers 900
+.\.venv\Scripts\python -m scripts.eval_model --with-rules   # bảng ngưỡng + so sánh cơ chế gắn cờ
+.\.venv\Scripts\python -m scripts.eval_model --csv holdout.csv --label-column is_fraud  # dữ liệu thật
 ```
+
+Chế độ `--csv` nhận file gắn nhãn có **13 cột feature** hoặc **12 cột context thô** (script tự tính
+feature), in đúng bộ chỉ số PR-AUC/KS/Brier/calibration/ngưỡng. Dòng lỗi bị báo kèm số dòng thay vì bị
+lọc im lặng. Hợp đồng cột đầy đủ: [`docs/model-card.md`](docs/model-card.md).
 
 ## Bảo mật & phân quyền
 
@@ -293,7 +308,7 @@ Sau đó:
 
 ```powershell
 .\.venv\Scripts\python -m pytest -q          # mặc định dùng fraudlens_test ở cổng 5432
-.\.venv\Scripts\ruff.exe check app tests
+.\.venv\Scripts\ruff.exe check app tests scripts
 cd frontend; npm run build
 ```
 
@@ -301,9 +316,14 @@ Muốn trỏ sang Postgres khác: `$env:TEST_DATABASE_URL = "postgresql+psycopg:
 Conftest **xoá và tạo lại schema** mỗi lần chạy, và từ chối chạy nếu tên database không chứa `test`
 (tránh xoá nhầm database thật). CI chạy đúng bộ test này trên PostgreSQL service.
 
-16 test bao phủ: login/refresh, RBAC, ingest → case → audit, decision không thể ghi đè, AI offline,
+**43 test** (khoảng 10 s khi schema đã có; lần chạy đầu chậm hơn vì phải tạo lại schema) bao phủ: login/refresh, RBAC, ingest → case → audit, decision không thể ghi đè, AI offline,
 AI qua OpenRouter (HTTP giả lập), fallback khi 429, seed không gọi LLM, security headers,
 fail-fast cấu hình production, rate-limit tạo lại giải thích, note/timeline, rule CRUD, dashboard, simulator.
+Nhóm **test hồi quy** (`tests/test_regressions.py`, `tests/test_scoring.py`, `tests/test_eval_dataset.py`)
+khoá lại các lỗi đã sửa: cookie logout, filter ngày lệch múi giờ, PATCH rule với điều kiện rỗng,
+`model_version`, `/api/health` không rò chi tiết hạ tầng, production bắt buộc opt-in khi bật DEMO_MODE, hai
+ngưỡng gắn cờ của ML/rule, chiều đóng góp của occlusion attribution, và hợp đồng file CSV gắn nhãn (hai định
+dạng cột + 5 kiểu dữ liệu bẩn bị từ chối kèm số dòng).
 
 ## API chính
 
@@ -322,7 +342,8 @@ fail-fast cấu hình production, rate-limit tạo lại giải thích, note/tim
 | GET | `/api/audit` | Audit trail |
 | GET/PATCH | `/api/settings` | Ngưỡng & trọng số |
 | GET | `/api/model/info` | Model card |
-| GET | `/api/health` | Health check |
+| GET | `/api/health` | Liveness (không phụ thuộc DB/model) |
+| GET | `/api/health/ready` | Readiness: DB truy cập được + model đã nạp (503 nếu không) |
 
 Swagger UI: `/api/docs`.
 
@@ -371,12 +392,19 @@ Muốn đổi lại theme thì sửa hai file trên rồi `cd frontend && npm ru
 
 ## Giới hạn & hướng phát triển
 
-- Dữ liệu huấn luyện & demo là **tổng hợp**, không phải dữ liệu ngân hàng thật. Cần thẩm định lại model trên dữ liệu thực trước khi dùng production.
+- Dữ liệu huấn luyện & demo là **tổng hợp**, và nhãn sinh ra có tương quan trực tiếp với feature (mọi fraud
+  đều online/ban đêm/ngành rủi ro). Vì vậy AUC 0.977 đo khả năng học lại luật sinh dữ liệu, **không** đo năng
+  lực phát hiện gian lận thật. Chi tiết và cách sửa: [`docs/model-card.md`](docs/model-card.md).
 - Chưa có Alembic migration có version; schema dùng `create_all` + nâng cấp idempotent
   (`app/schema_migrations.py`, chạy tay bằng `scripts/migrate_db.py`). Khi đội ngũ lớn hơn nên
   chuyển sang Alembic để có lịch sử migration rõ ràng.
 - Rate-limit login lưu in-memory theo process; khi scale nhiều replica nên chuyển Redis.
+- Access token (JWT) không bị thu hồi ngay khi logout/reset mật khẩu — chỉ refresh token bị revoke, nên token
+  còn hiệu lực tối đa 45 phút. Hướng xử lý: thêm `token_version` vào user + claim JWT.
 - Có thể mở rộng: import CSV, webhook realtime, phân ca trực, báo cáo PDF, SSO, notification email/Slack.
+
+📋 Kế hoạch cải thiện chi tiết theo thứ tự ưu tiên (kèm công sức và tiêu chí hoàn thành):
+[`docs/roadmap.md`](docs/roadmap.md).
 
 ## Ghi chú học thuật
 

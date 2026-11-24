@@ -63,6 +63,8 @@ export function SettingsPage() {
           high_threshold: form?.high_threshold,
           ml_weight: form?.ml_weight,
           rule_weight: form?.rule_weight,
+          ml_flag_probability: form?.ml_flag_probability,
+          rule_flag_threshold: form?.rule_flag_threshold,
           ai_enabled: form?.ai_enabled,
         }),
       }),
@@ -186,6 +188,60 @@ export function SettingsPage() {
 
               <div className="divider" />
 
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <label className="label mb-0" htmlFor="ml-flag-probability">Ngưỡng tự gắn cờ của model ML</label>
+                  <span className="mono text-[12px] text-azure-400">
+                    {(form.ml_flag_probability * 100).toFixed(0)}%
+                  </span>
+                </div>
+                <input
+                  id="ml-flag-probability"
+                  type="range"
+                  min={Math.ceil(form.review_threshold) / 100}
+                  max={1}
+                  step={0.01}
+                  value={form.ml_flag_probability}
+                  disabled={!isAdmin}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setForm((prev) => prev && { ...prev, ml_flag_probability: value });
+                  }}
+                  className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-ink-700 accent-azure-400 disabled:opacity-40"
+                />
+                <p className="mt-1.5 text-[9.5px] leading-relaxed text-slate-600">
+                  Xác suất model ≥ ngưỡng này thì giao dịch được gắn cờ dù chưa có rule nào khớp. Phải ≥ ngưỡng cảnh báo
+                  ({form.review_threshold.toFixed(0)} điểm).
+                </p>
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <label className="label mb-0" htmlFor="rule-flag-threshold">Ngưỡng tự gắn cờ của rule engine</label>
+                  <span className="mono text-[12px] text-coral-400">{form.rule_flag_threshold.toFixed(0)}</span>
+                </div>
+                <input
+                  id="rule-flag-threshold"
+                  type="range"
+                  min={Math.ceil(form.review_threshold)}
+                  max={100}
+                  step={1}
+                  value={form.rule_flag_threshold}
+                  disabled={!isAdmin}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setForm((prev) => prev && { ...prev, rule_flag_threshold: value });
+                  }}
+                  className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-ink-700 accent-coral-400 disabled:opacity-40"
+                />
+                <p className="mt-1.5 text-[9.5px] leading-relaxed text-slate-600">
+                  Tổng điểm các rule khớp ≥ ngưỡng này thì giao dịch được gắn cờ dù model cho điểm thấp — lưới an toàn cho
+                  pattern mà model bỏ sót.
+                </p>
+              </div>
+
+              <div className="divider" />
+
               <div className="rounded-xl border border-mint-400/15 bg-mint-500/[0.045] px-3.5 py-3">
                 <div className="flex items-center gap-2 text-mint-300">
                   <ShieldCheck size={13} />
@@ -250,7 +306,8 @@ export function SettingsPage() {
 
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[10px] text-slate-500">
-                  Điểm tổng hợp = ML × trọng số + rule × trọng số. Tổng phải bằng 100%.
+                  Điểm tổng hợp = ML × trọng số + rule × trọng số, nhưng không thấp hơn tín hiệu đã vượt ngưỡng riêng của
+                  nó. Tổng trọng số phải bằng 100%.
                 </p>
                 <span className={clsx("mono text-[10.5px]", weightTotal === 100 ? "text-mint-300" : "text-amber-400")}>
                   Tổng {weightTotal}%
@@ -417,6 +474,9 @@ export function SettingsPage() {
           </div>
         </Disclosure>
 
+        {/* Chỉ admin thấy thông tin đăng nhập demo: viewer/analyst không cần
+            biết mật khẩu của tài khoản quản trị. */}
+        {isAdmin && (
         <Disclosure
           title="Tài khoản demo"
           subtitle="Chỉ hiển thị khi DEMO_MODE bật"
@@ -467,6 +527,7 @@ export function SettingsPage() {
             </p>
           )}
         </Disclosure>
+        )}
       </div>
     </div>
   );

@@ -112,12 +112,16 @@ def refresh(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(request: Request, response: Response, db: Session = Depends(get_db)) -> Response:
+def logout(request: Request, db: Session = Depends(get_db)) -> Response:
     raw = request.cookies.get(REFRESH_COOKIE)
     if raw:
         revoke_refresh_token(db, raw)
+    # Xoá cookie trên CHÍNH object được trả về: header set trên `Response` do
+    # FastAPI inject (tham số `response: Response`) bị bỏ khi handler return một
+    # `Response` khác, nên trước đây cookie refresh không bao giờ bị xoá.
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
     response.delete_cookie(REFRESH_COOKIE, path="/api/auth")
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return response
 
 
 @router.get("/me", response_model=UserOut)

@@ -7,6 +7,12 @@ Tài liệu này là **kết quả kiểm chứng thực tế** (không phải m
 - Môi trường: Windows, Python 3.14.5, Node 24, PostgreSQL 18.4 (cổng 5432, bản cài Windows), Chromium
 - Phiên bản: commit `8d40aa4` + các thay đổi chuyển sang PostgreSQL trong lần audit này
 
+> **Ghi chú 24/11/2026** — tài liệu này giữ nguyên làm bản ghi tại thời điểm audit. Sau đó code đã thay đổi
+> (xem [`roadmap.md`](roadmap.md) mục 0): bộ test là **34** test chứ không còn 16; công thức chấm điểm thêm
+> hai ngưỡng thành phần nên câu "ml × 55% + rule × 45%" ở mục 2 chỉ còn đúng cho phần *blend nền*; `/api/health`
+> giờ là liveness và `/api/health/ready` mới kiểm tra DB/model. Số liệu model mới nhất:
+> [`model-card.md`](model-card.md).
+
 ## 1. Kết luận nhanh
 
 | Hạng mục | Kết quả |

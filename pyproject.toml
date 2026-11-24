@@ -16,6 +16,7 @@ ignore = [
     "BLE001", # cần fallback khi provider AI lỗi
     "UP017",  # dùng timezone.utc cho rõ nghĩa
     "RUF001", # ký tự Unicode có nghĩa trong tiếng Việt
+    "RUF002", # docstring tiếng Việt dùng ×, –, “ ” là cố ý
     "E501",
 ]
 

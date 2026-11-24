@@ -394,6 +394,10 @@ class Setting(Base):
     high_threshold: Mapped[float] = mapped_column(Float, default=78.0)
     ml_weight: Mapped[float] = mapped_column(Float, default=0.55)
     rule_weight: Mapped[float] = mapped_column(Float, default=0.45)
+    # Hai ngưỡng thành phần: một tín hiệu vượt ngưỡng của chính nó thì được phép
+    # tự gắn cờ, không bị blend 55/45 pha loãng xuống dưới review_threshold.
+    ml_flag_probability: Mapped[float] = mapped_column(Float, default=0.65)
+    rule_flag_threshold: Mapped[float] = mapped_column(Float, default=80.0)
     ai_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
 
@@ -410,5 +414,10 @@ class Setting(Base):
             "AND rule_weight >= 0 AND rule_weight <= 1 "
             "AND (ml_weight + rule_weight) > 0",
             name="ck_settings_weights",
+        ),
+        CheckConstraint(
+            "ml_flag_probability >= 0 AND ml_flag_probability <= 1 "
+            "AND rule_flag_threshold >= 0 AND rule_flag_threshold <= 100",
+            name="ck_settings_flag_gates",
         ),
     )

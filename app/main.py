@@ -51,13 +51,19 @@ def _validate_production_config() -> None:
         problems.append("COOKIE_SECURE phải = true khi chạy sau HTTPS")
     if "*" in settings.cors_origin_list:
         problems.append("CORS_ORIGINS không được để '*' khi allow_credentials=true")
+    if settings.demo_mode and not settings.allow_demo_in_production:
+        problems.append(
+            "DEMO_MODE=true tạo sẵn tài khoản admin với mật khẩu công khai; "
+            "đặt DEMO_MODE=false, hoặc ALLOW_DEMO_IN_PRODUCTION=true nếu đây là bản demo công khai có chủ đích"
+        )
     if problems:
         raise RuntimeError("Cấu hình production chưa an toàn: " + "; ".join(problems))
 
     if settings.demo_mode:
         logger.warning(
-            "DEMO_MODE=true trên production — tài khoản demo dùng mật khẩu công khai, "
-            "ai biết email cũng đăng nhập được. Đổi mật khẩu hoặc tắt DEMO_MODE trước khi mở rộng."
+            "DEMO_MODE=true trên production (đã bật ALLOW_DEMO_IN_PRODUCTION) — "
+            "tài khoản demo dùng mật khẩu công khai, ai biết email cũng đăng nhập được. "
+            "Chỉ dùng cho bản demo công khai, không dùng với dữ liệu thật."
         )
     if settings.seed_on_start and not settings.demo_mode:
         logger.warning("SEED_ON_START=true trên production: dữ liệu demo sẽ được tạo vào database thật.")
@@ -142,21 +148,37 @@ async def unhandled_exception(_: Request, exc: Exception) -> JSONResponse:
 
 @app.get("/api/health", tags=["system"])
 def health() -> dict:
+    """Liveness: tiến trình còn phục vụ được, không phụ thuộc DB/model.
+
+    Không truy vấn database ở đây để một sự cố DB ngắn không làm nền tảng
+    restart container. Kiểm tra phụ thuộc dùng ``/api/health/ready``.
+    """
+    return {"status": "ok", "service": "fraudlens", "environment": settings.environment}
+
+
+@app.get("/api/health/ready", tags=["system"])
+def health_ready() -> JSONResponse:
+    """Readiness: DB truy cập được và model đã nạp."""
     try:
         with SessionLocal() as db:
             db.execute(text("SELECT 1"))
         model_meta = metadata()
-        return {
-            "status": "ok",
+    except Exception as exc:
+        # Không trả nội dung lỗi cho client (lộ host/user/driver); chi tiết vào log.
+        logger.error("Readiness check failed: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "detail": "Dịch vụ chưa sẵn sàng"},
+        )
+    return JSONResponse(
+        content={
+            "status": "ready",
             "database": engine.dialect.name,
             "model": model_meta["version"],
             "model_auc": model_meta["auc"],
-            "environment": settings.environment,
             "demo_mode": settings.demo_mode,
         }
-    except Exception as exc:
-        logger.error("Health check failed: %s", exc)
-        return JSONResponse(status_code=503, content={"status": "degraded", "detail": str(exc)})
+    )
 
 
 app.include_router(auth.router, prefix="/api")
